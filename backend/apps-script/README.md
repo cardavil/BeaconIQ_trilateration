@@ -3,24 +3,24 @@
 ## Overview
 
 REST backend for the BeaconIQ Android BLE trilateration testing app.
-Receives test session data via HTTP POST, writes it to Google Sheets,
-and runs an automated AI analysis pipeline using Gemini.
+Receives test session data via HTTP POST and writes it to Google Sheets.
+Also serves a web console (doGet) to browse recorded sessions.
 
 ## Architecture
 
 | File | Responsibility |
 |------|---------------|
-| `Código.js` | Entry point: doPost/doGet routing |
+| `Código.js` | Entry point: doPost/doGet routing, web UI API |
 | `auth.js` | Token validation |
-| `config.js` | Cached properties, timestamps, headers, _ensureSheet |
-| `sessions.js` | Session recording orchestrator, ID generation |
+| `config.js` | Cached properties, timestamps, headers, `_ensureSheet` |
+| `sessions.js` | Session recording orchestrator, ID generation, lookup helpers |
 | `readings.js` | Batch write iBeacon parsed readings |
 | `rawscans.js` | Batch write raw BLE scan data |
-| `analysts.js` | Fetch analyst list from sheet |
-| `ia_pipeline.js` | GeminiBIQ, AgentBIQ, RunnerBIQ constructors |
-| `ia_agents.js` | 5-agent pipeline definitions |
-| `ia_knowledge.js` | Domain knowledge prompts for BLE/trilateration |
-| `analysis.js` | Analysis orchestrator, writes to Analysis sheet |
+| `appsscript.json` | Apps Script manifest (runtime, scopes, webapp config) |
+| `index.html` | Web console template |
+| `css_styles.html` | Console styles (included via `<?!= include() ?>`) |
+| `components_sessions.html` | Sessions list component |
+| `js_main.html` | Console JavaScript |
 
 ## Setup
 
@@ -29,16 +29,11 @@ and runs an automated AI analysis pipeline using Gemini.
    - `SESSIONS_SHEET_ID` — BeaconIQ_Sessions spreadsheet ID
    - `READINGS_SHEET_ID` — BeaconIQ_Readings spreadsheet ID
    - `RAWSCANS_SHEET_ID` — BeaconIQ_RawScans spreadsheet ID
-   - `ANALYSIS_SHEET_ID` — BeaconIQ_Analysis spreadsheet ID
-   - `ANALYSTS_SHEET_ID` — BeaconIQ_Analysts spreadsheet ID
-   - `ANALYST_CARLOS` — Gemini API key for analyst Carlos
 
-2. Five Google Spreadsheets, each with one tab matching the name:
+2. Three Google Spreadsheets, each with one tab matching the name:
    - BeaconIQ_Sessions (26 columns)
    - BeaconIQ_Readings (17 columns)
    - BeaconIQ_RawScans (8 columns)
-   - BeaconIQ_Analysis (12 columns)
-   - BeaconIQ_Analysts (2 columns: name, key_name)
 
    Headers are auto-created on first write by `_ensureSheet()`.
 
@@ -60,29 +55,15 @@ Then deploy via the Apps Script UI:
 ```
 curl -L --post301 --post302 --post303 \
   -H "Content-Type: application/json" \
-  -d '{"auth":"YOUR_TOKEN","action":"get_analysts"}' \
+  -d '{"auth":"YOUR_TOKEN","action":"list_sessions"}' \
   "YOUR_DEPLOY_URL"
 ```
 
 ## Actions
 
-### get_analysts
-
-Returns the list of analysts for the Android dropdown.
-
-Request:
-```json
-{ "auth": "YOUR_TOKEN", "action": "get_analysts" }
-```
-
-Response:
-```json
-{ "analysts": [{ "name": "Carlos", "key_name": "ANALYST_CARLOS" }] }
-```
-
 ### record_session
 
-Writes session data to 3 sheets and triggers AI analysis.
+Writes session data to 3 sheets (sessions, readings, raw scans).
 
 Request:
 ```json
@@ -124,7 +105,12 @@ Request:
       "major": 100, "minor": 1,
       "rssi_raw": -67, "rssi_filtered": -65.3,
       "distance_m": 2.41, "est_x": 1.83, "est_y": 2.47,
-      "model_phase": "phase_1"
+      "model_phase": "phase_1",
+      "dist_no_kalman": 2.82,
+      "radar_closest": "2,1",
+      "scan_nearest_rssi": "2,1",
+      "service_closest": "2,1",
+      "dual_conflict": false
     }
   ],
   "raw_scans": [
@@ -146,35 +132,35 @@ Response:
   "error": false,
   "session_id": "BIQ-0001",
   "readings_count": 1,
-  "raw_scans_count": 1,
-  "analysis_status": "ok"
+  "raw_scans_count": 1
 }
 ```
 
-### analyze_session
+### list_sessions
 
-Re-run AI analysis on an existing session.
+Returns all recorded sessions (newest first).
 
 Request:
 ```json
-{
-  "auth": "YOUR_TOKEN",
-  "action": "analyze_session",
-  "session_id": "BIQ-0001",
-  "analyst_key_name": "ANALYST_CARLOS"
-}
+{ "auth": "YOUR_TOKEN", "action": "list_sessions" }
 ```
 
-## AI Pipeline
-
-5-agent sequential pipeline:
-1. **Signal Analyst** (gemini-3.1-flash-lite) — RSSI quality analysis
-2. **Position Analyst** (gemini-3.1-flash-lite) — trilateration accuracy
-3. **Environment Analyst** (gemini-3.1-flash-lite) — interference/environment
-4. **Consistency Verifier** (gemini-2.5-flash) — cross-check for contradictions
-5. **Report Formatter** (gemini-3.1-flash-lite) — structured output
-
-8-second delay between agents to respect Gemini free-tier rate limits.
+Response:
+```json
+{
+  "sessions": [
+    {
+      "session_id": "BIQ-0001",
+      "timestamp_start": "2026-04-26 14:30:00",
+      "analyst": "Carlos",
+      "duration_sec": 120,
+      "room": "Living room",
+      "beacons_detected": 3,
+      "ibeacon_hits": 312
+    }
+  ]
+}
+```
 
 ## Notes
 
@@ -182,4 +168,3 @@ Request:
 - All files use `var` (not const/let) to match DiversoLAB conventions
 - Batch `setValues()` is used for readings and raw scans (not appendRow loops)
 - Session IDs follow the `BIQ-NNNN` pattern with LockService mutex
-- AI analysis is best-effort — if Gemini fails, session data is still saved

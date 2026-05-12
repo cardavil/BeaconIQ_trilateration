@@ -35,47 +35,4 @@ public class Triangulation {
         return null;
     }
 
-    /*
-
-    // Define the positions of the three iBeacons (assuming they form a equilateral triangle)
-    private static final double[][] beaconPositions = {{0, 0}, {2, 0}, {1, Math.sqrt(3)}};
-
-    // Method to calculate the distance between the cellphone and each beacon
-    public static HashMap<String, Double> calculateDistances(double[] rssiValues) {
-        HashMap<String, Double> distances = new HashMap<>();
-        for (int i = 0; i < rssiValues.length; i++) {
-            double distance = calculateDistanceFromRSSI(rssiValues[i]);
-            distances.put("beacon" + (i + 1), distance);
-        }
-        return distances;
-    }
-
-    // Method to calculate distance from RSSI value (you may need to calibrate this based on your setup)
-    private static double calculateDistanceFromRSSI(double rssi) {
-        // A simple linear model to convert RSSI to distance (you may need to refine this based on your setup)
-        double txPower = -59; // The transmitted power in dBm at 1 meter from the beacon
-        return Math.pow(10, ((txPower - rssi) / (10 * 2))); // 2 is the path loss exponent
-    }
-
-    // Method to calculate the position of the cellphone using triangulation
-    public static double[] calculatePosition(HashMap<String, Double> distances) {
-        double[] position = new double[2];
-        double sumX = 0, sumY = 0;
-        for (String beacon : distances.keySet()) {
-            int beaconIndex = Integer.parseInt(beacon.substring(6)) - 1;
-            double[] beaconPosition = beaconPositions[beaconIndex];
-            double distance = distances.get(beacon);
-            sumX += beaconPosition[0] * distance;
-            sumY += beaconPosition[1] * distance;
-        }
-        double totalDistance = 0;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            totalDistance = distances.values().stream().mapToDouble(Double::doubleValue).sum();
-        }
-        position[0] = sumX / totalDistance;
-        position[1] = sumY / totalDistance;
-        return position;
-    }
-    */
-
 }
