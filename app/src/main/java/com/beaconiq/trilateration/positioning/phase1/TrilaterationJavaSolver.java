@@ -10,6 +10,7 @@ package com.beaconiq.trilateration.positioning.phase1;
 import android.util.Log;
 
 import java.util.Collection;
+import java.util.Map;
 
 /**
  * Trilateration solver for 3+ beacons.
@@ -89,6 +90,55 @@ public class TrilaterationJavaSolver {
         }
 
         return closest != null ? closest.getUid() : null;
+    }
+
+    public static double[] estimatePositionWCL(
+            Collection<BeaconSample> beacons,
+            double txPower, double pathLossN, double scaleFactor) {
+        if (beacons == null || beacons.size() < 3) return null;
+
+        double sumWx = 0, sumWy = 0, sumW = 0;
+        for (BeaconSample b : beacons) {
+            Double d = b.getKalmanFilteredDistance(txPower, pathLossN, scaleFactor);
+            if (d == null || d <= 0) continue;
+            double w = 1.0 / (d * d);
+            sumWx += w * b.getX();
+            sumWy += w * b.getY();
+            sumW += w;
+        }
+        if (sumW == 0) return null;
+        return new double[]{sumWx / sumW, sumWy / sumW};
+    }
+
+    public static String findClosestToPosition(
+            double[] pos, Map<String, BeaconSample> beaconMap) {
+        if (pos == null || beaconMap == null) return null;
+        String closest = null;
+        double minDist = Double.MAX_VALUE;
+        for (Map.Entry<String, BeaconSample> entry : beaconMap.entrySet()) {
+            BeaconSample b = entry.getValue();
+            double dx = pos[0] - b.getX();
+            double dy = pos[1] - b.getY();
+            double d = Math.sqrt(dx * dx + dy * dy);
+            if (d < minDist) {
+                minDist = d;
+                closest = entry.getKey();
+            }
+        }
+        return closest;
+    }
+
+    public static double distanceToClosestBeacon(
+            double[] pos, Map<String, BeaconSample> beaconMap) {
+        if (pos == null || beaconMap == null) return Double.MAX_VALUE;
+        double minDist = Double.MAX_VALUE;
+        for (BeaconSample b : beaconMap.values()) {
+            double dx = pos[0] - b.getX();
+            double dy = pos[1] - b.getY();
+            double d = Math.sqrt(dx * dx + dy * dy);
+            if (d < minDist) minDist = d;
+        }
+        return minDist;
     }
 
 }
