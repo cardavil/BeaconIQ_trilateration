@@ -35,6 +35,7 @@ import com.beaconiq.trilateration.positioning.phase1.TrilaterationJavaSolver;
 import com.beaconiq.trilateration.scan.BleDevice;
 import com.beaconiq.trilateration.scan.BleScanner;
 import com.beaconiq.trilateration.storage.CalibrationStore;
+import com.beaconiq.trilateration.sensor.OrientationSensor;
 import com.beaconiq.trilateration.ui.PositioningCanvasView;
 
 import org.altbeacon.beacon.Beacon;
@@ -178,6 +179,8 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private boolean isDetailActivityOpen;             // original enterZone() guard
     private String currentClosestUuid;                // BeaconScanService.currentClosestUuid
 
+    private OrientationSensor orientationSensor;
+
     private final Handler modelHandler = new Handler(Looper.getMainLooper());
     private final Runnable modelEvalRunnable = new Runnable() {
         @Override
@@ -210,6 +213,13 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
         bleScanner = new BleScanner(requireContext());
         bleScanner.setListener(this);
+
+        orientationSensor = new OrientationSensor();
+        orientationSensor.setListener((azimuth, pitch, roll) -> {
+            if (positioningCanvas != null) {
+                positioningCanvas.updateOrientation(azimuth, pitch, roll);
+            }
+        });
 
         btnStartSession.setEnabled(
                 editAnalyst.getText().toString().trim().length() > 0);
@@ -554,6 +564,10 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         timerHandler.postDelayed(timerRunnable, 1000);
         modelHandler.postDelayed(modelEvalRunnable, modelEvalIntervalMs);
 
+        if (isPhaseTwo && orientationSensor != null) {
+            orientationSensor.start(requireActivity());
+        }
+
         Log.d(TAG, "Session started: phase=" + (isPhaseTwo ? "II" : "I")
                 + " duration=" + selectedDurationSec + "s");
     }
@@ -566,6 +580,9 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         timerHandler.removeCallbacks(timerRunnable);
         modelHandler.removeCallbacks(modelEvalRunnable);
         bleScanner.stopScan();
+        if (orientationSensor != null) {
+            orientationSensor.stop();
+        }
 
         ((MainActivity) requireActivity()).resumeScannerAfterRecording();
 
@@ -710,6 +727,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
                 .putFloat("debug_scale_factor", (float) scaleFactor)
                 .putInt("debug_beacon_timeout_ms", (int) beaconTimeoutMs)
                 .putInt("debug_eval_interval_ms", (int) modelEvalIntervalMs)
+                .putInt("debug_solver_index", spinnerSolver.getSelectedItemPosition())
                 .apply();
     }
 
@@ -768,9 +786,9 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
         updateModelStatusPanel();
         if (isPhaseTwo) {
-            positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), estimatedPosition);
+            positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), estimatedPosition, closestBeaconUid);
         } else {
-            positioningCanvas.update(new HashMap<>(p1BeaconMap), estimatedPosition);
+            positioningCanvas.update(new HashMap<>(p1BeaconMap), estimatedPosition, closestBeaconUid);
         }
     }
 
@@ -1216,6 +1234,9 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         super.onDestroyView();
         timerHandler.removeCallbacks(timerRunnable);
         modelHandler.removeCallbacks(modelEvalRunnable);
+        if (orientationSensor != null) {
+            orientationSensor.stop();
+        }
         if (bleScanner != null && bleScanner.isScanning()) {
             bleScanner.stopScan();
         }
