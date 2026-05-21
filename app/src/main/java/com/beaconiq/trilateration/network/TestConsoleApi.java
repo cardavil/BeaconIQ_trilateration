@@ -1,5 +1,7 @@
 package com.beaconiq.trilateration.network;
 
+import android.util.Log;
+
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -12,12 +14,14 @@ import java.nio.charset.StandardCharsets;
 
 public class TestConsoleApi {
 
+    private static final String TAG = "BeaconIQ.Api";
+
     public static final String ENDPOINT_URL =
             "https://script.google.com/macros/s/AKfycbz0IopNlgzKJHlvvTQSAXYthfHsaAkwsK0SdcSe5fQAsFOgqshuFFN5sX9oJDpgdV9ESw/exec";
     public static final String AUTH_TOKEN = "TEDtour_TRImodel";
     private static final int MAX_REDIRECTS = 5;
     private static final int CONNECT_TIMEOUT_MS = 30_000;
-    private static final int READ_TIMEOUT_MS = 300_000;
+    private static final int READ_TIMEOUT_MS = 60_000;
 
     public static String postSession(JSONObject payload) throws IOException {
         String targetUrl = ENDPOINT_URL;
@@ -51,7 +55,6 @@ public class TestConsoleApi {
                     throw new IOException("Redirect with no Location header");
                 }
                 targetUrl = location;
-                // 307/308 preserve the original method; all others switch to GET
                 if (code != 307 && code != 308) {
                     usePost = false;
                 }
@@ -97,8 +100,6 @@ public class TestConsoleApi {
             throw new IOException("HTTP " + code + ": " + sb);
         }
 
-        // Apps Script ContentService always returns HTTP 200 even on errors,
-        // so check the JSON body for an error status
         String body = sb.toString();
         try {
             JSONObject json = new JSONObject(body);
@@ -107,7 +108,6 @@ public class TestConsoleApi {
                 throw new IOException("Apps Script error: " + msg);
             }
         } catch (org.json.JSONException ignored) {
-            // Not JSON — return raw body
         }
         return body;
     }

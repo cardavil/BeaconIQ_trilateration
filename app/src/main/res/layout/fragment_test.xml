@@ -409,6 +409,52 @@
                         android:textSize="14sp" />
                 </LinearLayout>
 
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="Kalman Q — Process Noise (0.001 to 1.0)"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <EditText
+                    android:id="@+id/edit_kalman_q"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/edit_border"
+                    android:fontFamily="monospace"
+                    android:hint="0.05"
+                    android:importantForAutofill="no"
+                    android:inputType="numberDecimal"
+                    android:padding="10dp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_dim"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="Kalman R — Measurement Noise (0.01 to 5.0)"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp" />
+
+                <EditText
+                    android:id="@+id/edit_kalman_r"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/edit_border"
+                    android:fontFamily="monospace"
+                    android:hint="0.25"
+                    android:importantForAutofill="no"
+                    android:inputType="numberDecimal"
+                    android:padding="10dp"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_dim"
+                    android:textSize="14sp" />
+
                 <LinearLayout
                     android:id="@+id/solver_section"
                     android:layout_width="match_parent"

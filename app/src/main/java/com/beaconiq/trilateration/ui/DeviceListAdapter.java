@@ -15,6 +15,7 @@ import com.beaconiq.trilateration.scan.BleDevice;
 import org.altbeacon.beacon.Beacon;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,16 +88,15 @@ public class DeviceListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
             Long lastSeen = beaconLastSeen.get(beaconCompositeId(b));
             return lastSeen != null && lastSeen < cutoff;
         });
-        boolean removedGeneric = genericDevices.removeIf(
-                d -> d.getLastSeenMs() < cutoff);
+        boolean removedGeneric = genericDevices.removeIf(d -> d.getLastSeenMs() < cutoff);
         if (removedBeacons || removedGeneric) {
             notifyDataSetChanged();
         }
     }
 
     private void sortAndNotify() {
-        beacons.sort((a, b) -> Integer.compare(b.getRssi(), a.getRssi()));
-        genericDevices.sort((a, b) -> Long.compare(b.getLastSeenMs(), a.getLastSeenMs()));
+        Collections.sort(beacons, (a, b) -> Integer.compare(b.getRssi(), a.getRssi()));
+        Collections.sort(genericDevices, (a, b) -> Long.compare(b.getLastSeenMs(), a.getLastSeenMs()));
         notifyDataSetChanged();
     }
 
