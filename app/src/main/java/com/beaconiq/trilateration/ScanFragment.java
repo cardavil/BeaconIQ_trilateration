@@ -1,6 +1,7 @@
 package com.beaconiq.trilateration;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -8,6 +9,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -34,14 +37,23 @@ import com.beaconiq.trilateration.scan.BleDevice;
 import com.beaconiq.trilateration.scan.BleScanner;
 import com.beaconiq.trilateration.sensor.OrientationSensor;
 import com.beaconiq.trilateration.storage.CalibrationStore;
+import com.beaconiq.trilateration.ui.BeaconCardAdapter;
+import com.beaconiq.trilateration.ui.BeaconCardItem;
 import com.beaconiq.trilateration.ui.DeviceListAdapter;
 import com.beaconiq.trilateration.ui.PositioningCanvasView;
 
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+
 import org.altbeacon.beacon.Beacon;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ScanFragment extends Fragment implements BleScanner.ScanListener {
@@ -83,6 +95,13 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
     private OrientationSensor orientationSensor;
     private final Map<String, BeaconSample> beaconSampleMap = new ConcurrentHashMap<>();
     private int autoPositionCounter = 0;
+
+    private View beaconBottomSheet;
+    private BottomSheetBehavior<View> bottomSheetBehavior;
+    private BeaconCardAdapter beaconCardAdapter;
+    private TextView beaconSheetHeader;
+    private final Set<String> vibratedBeaconIds = new HashSet<>();
+    private Vibrator vibrator;
 
     private final Runnable staleRunnable = new Runnable() {
         @Override
@@ -167,6 +186,21 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
 
         handler.postDelayed(staleRunnable, STALE_CHECK_INTERVAL_MS);
 
+        beaconBottomSheet = view.findViewById(R.id.beacon_bottom_sheet);
+        beaconSheetHeader = view.findViewById(R.id.beacon_sheet_header);
+        bottomSheetBehavior = BottomSheetBehavior.from(beaconBottomSheet);
+        bottomSheetBehavior.setPeekHeight(
+                (int) (220 * getResources().getDisplayMetrics().density));
+        bottomSheetBehavior.setHideable(true);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+
+        RecyclerView beaconCardList = view.findViewById(R.id.beacon_card_list);
+        beaconCardAdapter = new BeaconCardAdapter();
+        beaconCardList.setLayoutManager(new LinearLayoutManager(requireContext()));
+        beaconCardList.setAdapter(beaconCardAdapter);
+
+        vibrator = (Vibrator) requireContext().getSystemService(Context.VIBRATOR_SERVICE);
+
         setStatus("Idle", R.color.text_dim);
         scanButton.setOnClickListener(v -> toggleScan());
     }
@@ -185,6 +219,11 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             exploreCanvas.clear();
             beaconSampleMap.clear();
             autoPositionCounter = 0;
+
+            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+            beaconBottomSheet.setVisibility(View.GONE);
+            vibratedBeaconIds.clear();
+            beaconCardAdapter.updateItems(Collections.emptyList());
         } else {
             applyAllParameters();
             bleScanner.startScan();
@@ -199,6 +238,10 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             exploreCanvas.clear();
             exploreCanvas.setVisibility(View.VISIBLE);
             handler.postDelayed(positionEvalRunnable, evalIntervalMs);
+
+            vibratedBeaconIds.clear();
+            beaconBottomSheet.setVisibility(View.VISIBLE);
+            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
         }
     }
 
@@ -252,6 +295,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         }
 
         exploreCanvas.updateP2(new HashMap<>(beaconSampleMap), position, closestKey);
+        updateBeaconCards(closestKey);
     }
 
     private String buildCompositeId(Beacon beacon) {
@@ -311,6 +355,10 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         exploreCanvas.setVisibility(View.GONE);
         exploreCanvas.clear();
         beaconSampleMap.clear();
+
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        beaconBottomSheet.setVisibility(View.GONE);
+        vibratedBeaconIds.clear();
     }
 
     public void resumeAfterRecording() {
@@ -329,6 +377,9 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             exploreCanvas.clear();
             exploreCanvas.setVisibility(View.VISIBLE);
             handler.postDelayed(positionEvalRunnable, evalIntervalMs);
+
+            beaconBottomSheet.setVisibility(View.VISIBLE);
+            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
         } else {
             setStatus("Idle", R.color.text_dim);
         }
@@ -349,6 +400,10 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
                         sample = new BeaconSample(compositeId, pos[0], pos[1],
                                 kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
                         beaconSampleMap.put(compositeId, sample);
+                        if (!vibratedBeaconIds.contains(compositeId)) {
+                            vibratedBeaconIds.add(compositeId);
+                            vibrateNewBeacon();
+                        }
                     }
                     sample.addRssi(beacon.getRssi());
                 }
@@ -433,6 +488,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
                 setStatus("Stopped", R.color.text_dim);
             }
         }
+        vibratedBeaconIds.clear();
     }
 
     @Override
@@ -529,5 +585,40 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         } catch (NumberFormatException e) {
             return defaultVal;
         }
+    }
+
+    // --- Beacon cards bottom sheet ---
+
+    private void vibrateNewBeacon() {
+        if (vibrator == null || !vibrator.hasVibrator()) return;
+        vibrator.vibrate(VibrationEffect.createWaveform(
+                new long[]{0, 50, 100, 50}, -1));
+    }
+
+    private void updateBeaconCards(String closestKey) {
+        List<BeaconCardItem> cards = new ArrayList<>();
+        for (Map.Entry<String, BeaconSample> entry : beaconSampleMap.entrySet()) {
+            BeaconSample sample = entry.getValue();
+            String compositeId = entry.getKey();
+            Double dist = sample.getKalmanFilteredDistance(txPower, pathLossN, scaleFactor);
+            if (dist == null) continue;
+            String label = extractLabel(compositeId);
+            boolean isClosest = compositeId.equals(closestKey);
+            cards.add(new BeaconCardItem(compositeId, label,
+                    sample.getLastRawRssi(), dist, isClosest));
+        }
+        Collections.sort(cards);
+        beaconCardAdapter.updateItems(cards);
+        if (beaconSheetHeader != null) {
+            beaconSheetHeader.setText("NEARBY BEACONS (" + cards.size() + ")");
+        }
+    }
+
+    private String extractLabel(String compositeId) {
+        String[] parts = compositeId.split(":");
+        if (parts.length >= 3) {
+            return parts[parts.length - 2] + "," + parts[parts.length - 1];
+        }
+        return compositeId;
     }
 }

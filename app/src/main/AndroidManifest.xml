@@ -20,6 +20,9 @@
     <!-- Network access for Apps Script endpoint -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Vibrate on beacon detection -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Hardware feature declaration -->
     <uses-feature android:name="android.hardware.bluetooth_le"
         android:required="true" />
