@@ -186,18 +186,19 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
 
         handler.postDelayed(staleRunnable, STALE_CHECK_INTERVAL_MS);
 
-        beaconBottomSheet = view.findViewById(R.id.beacon_bottom_sheet);
-        beaconSheetHeader = view.findViewById(R.id.beacon_sheet_header);
-        bottomSheetBehavior = BottomSheetBehavior.from(beaconBottomSheet);
-        bottomSheetBehavior.setPeekHeight(
-                (int) (220 * getResources().getDisplayMetrics().density));
-        bottomSheetBehavior.setHideable(true);
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
-
-        RecyclerView beaconCardList = view.findViewById(R.id.beacon_card_list);
-        beaconCardAdapter = new BeaconCardAdapter();
-        beaconCardList.setLayoutManager(new LinearLayoutManager(requireContext()));
-        beaconCardList.setAdapter(beaconCardAdapter);
+        // Bottom sheet cards disabled — keeping for future use
+        // beaconBottomSheet = view.findViewById(R.id.beacon_bottom_sheet);
+        // beaconSheetHeader = view.findViewById(R.id.beacon_sheet_header);
+        // bottomSheetBehavior = BottomSheetBehavior.from(beaconBottomSheet);
+        // bottomSheetBehavior.setPeekHeight(
+        //         (int) (220 * getResources().getDisplayMetrics().density));
+        // bottomSheetBehavior.setHideable(true);
+        // bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        //
+        // RecyclerView beaconCardList = view.findViewById(R.id.beacon_card_list);
+        // beaconCardAdapter = new BeaconCardAdapter();
+        // beaconCardList.setLayoutManager(new LinearLayoutManager(requireContext()));
+        // beaconCardList.setAdapter(beaconCardAdapter);
 
         vibrator = (Vibrator) requireContext().getSystemService(Context.VIBRATOR_SERVICE);
 
@@ -220,10 +221,10 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             beaconSampleMap.clear();
             autoPositionCounter = 0;
 
-            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
-            beaconBottomSheet.setVisibility(View.GONE);
+            // bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+            // beaconBottomSheet.setVisibility(View.GONE);
             vibratedBeaconIds.clear();
-            beaconCardAdapter.updateItems(Collections.emptyList());
+            // beaconCardAdapter.updateItems(Collections.emptyList());
         } else {
             applyAllParameters();
             bleScanner.startScan();
@@ -240,8 +241,8 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             handler.postDelayed(positionEvalRunnable, evalIntervalMs);
 
             vibratedBeaconIds.clear();
-            beaconBottomSheet.setVisibility(View.VISIBLE);
-            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+            // beaconBottomSheet.setVisibility(View.VISIBLE);
+            // bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
         }
     }
 
@@ -295,7 +296,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         }
 
         exploreCanvas.updateP2(new HashMap<>(beaconSampleMap), position, closestKey);
-        updateBeaconCards(closestKey);
+        // updateBeaconCards(closestKey);
     }
 
     private String buildCompositeId(Beacon beacon) {
@@ -356,8 +357,8 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         exploreCanvas.clear();
         beaconSampleMap.clear();
 
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
-        beaconBottomSheet.setVisibility(View.GONE);
+        // bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        // beaconBottomSheet.setVisibility(View.GONE);
         vibratedBeaconIds.clear();
     }
 
@@ -378,8 +379,8 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             exploreCanvas.setVisibility(View.VISIBLE);
             handler.postDelayed(positionEvalRunnable, evalIntervalMs);
 
-            beaconBottomSheet.setVisibility(View.VISIBLE);
-            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+            // beaconBottomSheet.setVisibility(View.VISIBLE);
+            // bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
         } else {
             setStatus("Idle", R.color.text_dim);
         }
