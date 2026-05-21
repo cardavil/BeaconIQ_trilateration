@@ -27,6 +27,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -50,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -210,7 +212,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         if (bleScanner.isScanning()) {
             bleScanner.stopScan();
             scanButton.setText("Start Scan");
-            scanButton.setBackgroundTintList(ColorStateList.valueOf(
+            ViewCompat.setBackgroundTintList(scanButton, ColorStateList.valueOf(
                     ContextCompat.getColor(requireContext(), R.color.teal)));
             scanButton.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_primary));
             setStatus("Stopped", R.color.text_dim);
@@ -229,7 +231,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             applyAllParameters();
             bleScanner.startScan();
             scanButton.setText("Stop Scan");
-            scanButton.setBackgroundTintList(ColorStateList.valueOf(
+            ViewCompat.setBackgroundTintList(scanButton, ColorStateList.valueOf(
                     ContextCompat.getColor(requireContext(), R.color.surface_2)));
             scanButton.setTextColor(ContextCompat.getColor(requireContext(), R.color.status_alert));
             setStatus("Scanning", R.color.status_ok);
@@ -278,7 +280,12 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
 
     private void evaluatePosition() {
         long now = System.currentTimeMillis();
-        beaconSampleMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
+        Iterator<Map.Entry<String, BeaconSample>> it = beaconSampleMap.entrySet().iterator();
+        while (it.hasNext()) {
+            if (now - it.next().getValue().lastSeen > beaconTimeoutMs) {
+                it.remove();
+            }
+        }
 
         double[] position;
         if (solverIndex == 1) {
@@ -346,7 +353,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         if (wasScanning) {
             bleScanner.stopScan();
             scanButton.setText("Start Scan");
-            scanButton.setBackgroundTintList(ColorStateList.valueOf(
+            ViewCompat.setBackgroundTintList(scanButton, ColorStateList.valueOf(
                     ContextCompat.getColor(requireContext(), R.color.teal)));
             scanButton.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_primary));
             setStatus("Paused (recording)", R.color.status_warn);
@@ -368,7 +375,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             applyAllParameters();
             bleScanner.startScan();
             scanButton.setText("Stop Scan");
-            scanButton.setBackgroundTintList(ColorStateList.valueOf(
+            ViewCompat.setBackgroundTintList(scanButton, ColorStateList.valueOf(
                     ContextCompat.getColor(requireContext(), R.color.surface_2)));
             scanButton.setTextColor(ContextCompat.getColor(requireContext(), R.color.status_alert));
             setStatus("Scanning", R.color.status_ok);
@@ -391,6 +398,8 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
     public void onBeaconDiscovered(Beacon beacon, byte[] scanRecord) {
         if (getActivity() != null) {
             getActivity().runOnUiThread(() -> {
+                if (beacon.getRssi() == 127) return;
+
                 if (adapter != null) adapter.updateBeacon(beacon);
 
                 if (bleScanner != null && bleScanner.isScanning()) {
@@ -428,7 +437,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
                 if (statusText != null) {
                     statusText.setText("Scan failed: " + errorCode);
                     scanButton.setText("Start Scan");
-                    scanButton.setBackgroundTintList(ColorStateList.valueOf(
+                    ViewCompat.setBackgroundTintList(scanButton, ColorStateList.valueOf(
                             ContextCompat.getColor(requireContext(), R.color.teal)));
                     scanButton.setTextColor(
                             ContextCompat.getColor(requireContext(), R.color.text_primary));
@@ -482,7 +491,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             handler.removeCallbacks(positionEvalRunnable);
             if (scanButton != null) {
                 scanButton.setText("Start Scan");
-                scanButton.setBackgroundTintList(ColorStateList.valueOf(
+                ViewCompat.setBackgroundTintList(scanButton, ColorStateList.valueOf(
                         ContextCompat.getColor(requireContext(), R.color.teal)));
                 scanButton.setTextColor(
                         ContextCompat.getColor(requireContext(), R.color.text_primary));

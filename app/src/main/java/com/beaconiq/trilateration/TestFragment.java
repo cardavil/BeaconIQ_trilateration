@@ -50,6 +50,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -73,7 +74,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
     private static final long DEFAULT_MODEL_EVAL_INTERVAL_MS = 3000;
     private static final long DEFAULT_BEACON_TIMEOUT_MS = 4000;
-    private static final double DEFAULT_SCALE_FACTOR = 5.0;
+    private static final double DEFAULT_SCALE_FACTOR = 1.0;
     private static final int MIN_BEACONS_REQUIRED = 3;
 
     private static final double DEFAULT_KALMAN_Q = 0.05;
@@ -108,6 +109,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private double scaleFactor = DEFAULT_SCALE_FACTOR;
     private long beaconTimeoutMs = DEFAULT_BEACON_TIMEOUT_MS;
     private long modelEvalIntervalMs = DEFAULT_MODEL_EVAL_INTERVAL_MS;
+    private int savedSolverIndex = 1;
 
     private View formSection;
     private Button btnStartSession;
@@ -286,6 +288,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         scaleFactor = beaconPrefs.getFloat("debug_scale_factor", (float) DEFAULT_SCALE_FACTOR);
         beaconTimeoutMs = beaconPrefs.getInt("debug_beacon_timeout_ms", (int) DEFAULT_BEACON_TIMEOUT_MS);
         modelEvalIntervalMs = beaconPrefs.getInt("debug_eval_interval_ms", (int) DEFAULT_MODEL_EVAL_INTERVAL_MS);
+        savedSolverIndex = beaconPrefs.getInt("debug_solver_index", 1);
 
         editTxPower.setText(String.valueOf(txPower));
         editPathLoss.setText(String.format(Locale.US, "%.1f", pathLossN));
@@ -391,6 +394,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
                     R.layout.spinner_item, SOLVER_MODES_P2);
             adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
             spinnerSolver.setAdapter(adapter);
+            spinnerSolver.setSelection(savedSolverIndex);
         } else {
             solverSection.setVisibility(View.GONE);
         }
@@ -755,7 +759,11 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         long now = System.currentTimeMillis();
 
         if (isPhaseTwo) {
-            p2BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
+            Iterator<Map.Entry<String, com.beaconiq.trilateration.positioning.phase2.BeaconSample>> p2It =
+                    p2BeaconMap.entrySet().iterator();
+            while (p2It.hasNext()) {
+                if (now - p2It.next().getValue().lastSeen > beaconTimeoutMs) p2It.remove();
+            }
             // Phase II: simple active-beacon count
             int active = countActiveBeacons();
             if (active < 3) {
@@ -766,7 +774,11 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
                 evaluatePhaseTwo();
             }
         } else {
-            p1BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
+            Iterator<Map.Entry<String, BeaconSample>> p1It =
+                    p1BeaconMap.entrySet().iterator();
+            while (p1It.hasNext()) {
+                if (now - p1It.next().getValue().lastSeen > beaconTimeoutMs) p1It.remove();
+            }
             // Phase I: 1:1 original RadarScanActivity.positioningRunnable logic
             int validBeaconCount = p1BeaconMap.size();
             Log.d(TAG, "P1 Beacon count: " + validBeaconCount);
@@ -1092,6 +1104,8 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         if (!isRecording) return;
 
         totalScanResults++;
+
+        if (isPhaseTwo && beacon.getRssi() == 127) return;
 
         String compositeId = beacon.getId1().toString();
         if (beacon.getIdentifiers().size() >= 2) compositeId += ":" + beacon.getId2();
