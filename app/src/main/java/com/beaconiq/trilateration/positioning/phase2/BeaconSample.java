@@ -1,8 +1,8 @@
 /**
- * Basado en: BeaconsIQ_Project/TEDtour/app/src/main/java/
+ * Based on: BeaconsIQ_Project/TEDtour/app/src/main/java/
  *   com/ited/org/ec/tedtour/model/BeaconSample.java
- * Modificado para Phase II: constructor 7-arg configurable,
- *   Kalman activo, rssiFilter, bufferSize/timeWindow configurables
+ * Modified for Phase II: 7-arg configurable constructor,
+ *   active Kalman, rssiFilter, configurable bufferSize/timeWindow
  */
 package com.beaconiq.trilateration.positioning.phase2;
 
