@@ -21,9 +21,6 @@ public class BeaconSample {
     public long lastSeen;
 
     private final KalmanFilter1D distanceFilter = new KalmanFilter1D(0.05, 0.25);
-    private final KalmanFilter1D rssiFilter = new KalmanFilter1D(0.05, 0.25);
-
-    private int lastRawRssi;
 
     public BeaconSample(String uid, double x, double y) {
         this.uid = uid;
@@ -36,11 +33,8 @@ public class BeaconSample {
     public void addRssi(double rssi) {
         rssiBuffer.addLast(new RssiSample(rssi));
         if (rssiBuffer.size() > 20) rssiBuffer.removeFirst();
-        lastRawRssi = (int) rssi;
         lastSeen = System.currentTimeMillis();
     }
-
-    public int getLastRawRssi() { return lastRawRssi; }
 
     public Double getAverageRssi() {
         long now = System.currentTimeMillis();
@@ -93,17 +87,6 @@ public class BeaconSample {
     public double getX() { return x; }
     public double getY() { return y; }
     public void setCoordinates(double x, double y) { this.x = x; this.y = y; }
-
-    public void updateKalmanParams(double q, double r) {
-        rssiFilter.reset(q, r);
-        distanceFilter.reset(q, r);
-    }
-
-    public Double getKalmanFilteredRssi() {
-        Double avgRssi = getAverageRssi();
-        if (avgRssi == null) return null;
-        return rssiFilter.update(avgRssi);
-    }
 
     public Double getKalmanFilteredDistance(double txPwr, double n, double scale) {
         Double avgRssi = getAverageRssi();

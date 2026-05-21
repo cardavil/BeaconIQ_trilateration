@@ -10,6 +10,7 @@ import android.util.AttributeSet;
 import android.view.View;
 
 import com.beaconiq.trilateration.positioning.phase1.BeaconSample;
+import com.beaconiq.trilateration.positioning.phase2.P2BeaconSample;
 
 import java.util.ArrayDeque;
 import java.util.Collections;
@@ -28,12 +29,16 @@ public class PositioningCanvasView extends View {
     private static final float GLOW_RADIUS = 36f;
     private static final float POSITION_RADIUS = 12f;
     private static final float RING_RADIUS = 28f;
+    private static final float GHOST_RING_RADIUS = 22f;
+    private static final float GHOST_STROKE_WIDTH = 3f;
     private static final float PAD = 48f;
 
     private Map<String, BeaconPos> beaconMap = new HashMap<>();
     private double[] estimatedPosition;
     private String closestBeaconKey;
     private final Deque<double[]> positionTrail = new ArrayDeque<>();
+
+    private String ghostA, ghostC, ghostD;
 
     private float compassAzimuth = 0f;
     private float tiltPitch = 0f;
@@ -59,6 +64,10 @@ public class PositioningCanvasView extends View {
     private final Paint compassLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint tiltBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint tiltDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint ghostAPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint ghostCPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint ghostDPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint ghostLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public PositioningCanvasView(Context context) {
         super(context);
@@ -136,6 +145,22 @@ public class PositioningCanvasView extends View {
 
         tiltDotPaint.setColor(0xFF00BCD4);
         tiltDotPaint.setStyle(Paint.Style.FILL);
+
+        ghostAPaint.setColor(0xFFD32F2F);
+        ghostAPaint.setStyle(Paint.Style.STROKE);
+        ghostAPaint.setStrokeWidth(GHOST_STROKE_WIDTH);
+
+        ghostCPaint.setColor(0xFFFFC107);
+        ghostCPaint.setStyle(Paint.Style.STROKE);
+        ghostCPaint.setStrokeWidth(GHOST_STROKE_WIDTH);
+
+        ghostDPaint.setColor(0xFF1976D2);
+        ghostDPaint.setStyle(Paint.Style.STROKE);
+        ghostDPaint.setStrokeWidth(GHOST_STROKE_WIDTH);
+
+        ghostLabelPaint.setColor(0xFF424242);
+        ghostLabelPaint.setTextSize(18f);
+        ghostLabelPaint.setTextAlign(Paint.Align.CENTER);
     }
 
     // Phase I entry point
@@ -154,17 +179,17 @@ public class PositioningCanvasView extends View {
     }
 
     // Phase II entry point
-    public void updateP2(Map<String, com.beaconiq.trilateration.positioning.phase2.BeaconSample> beacons,
+    public void updateP2(Map<String, P2BeaconSample> beacons,
                          double[] position) {
         updateP2(beacons, position, null);
     }
 
     // Phase II entry point with closest beacon
-    public void updateP2(Map<String, com.beaconiq.trilateration.positioning.phase2.BeaconSample> beacons,
+    public void updateP2(Map<String, P2BeaconSample> beacons,
                          double[] position, String closestKey) {
         Map<String, BeaconPos> converted = new HashMap<>();
-        for (Map.Entry<String, com.beaconiq.trilateration.positioning.phase2.BeaconSample> e : beacons.entrySet()) {
-            com.beaconiq.trilateration.positioning.phase2.BeaconSample b = e.getValue();
+        for (Map.Entry<String, P2BeaconSample> e : beacons.entrySet()) {
+            P2BeaconSample b = e.getValue();
             converted.put(e.getKey(), new BeaconPos(b.getX(), b.getY(), b.getFilteredDistance()));
         }
         updateInternal(converted, position, closestKey);
@@ -188,6 +213,13 @@ public class PositioningCanvasView extends View {
         invalidate();
     }
 
+    public void updatePhaseOneGhosts(String systemA, String systemC, String systemD) {
+        this.ghostA = systemA;
+        this.ghostC = systemC;
+        this.ghostD = systemD;
+        invalidate();
+    }
+
     public void updateOrientation(float azimuth, float pitch, float roll) {
         this.compassAzimuth = azimuth;
         this.tiltPitch = pitch;
@@ -201,6 +233,9 @@ public class PositioningCanvasView extends View {
         closestBeaconKey = null;
         positionTrail.clear();
         cachedBeaconKeys = null;
+        ghostA = null;
+        ghostC = null;
+        ghostD = null;
         invalidate();
     }
 
@@ -273,6 +308,7 @@ public class PositioningCanvasView extends View {
         double offY = PAD + (drawH - (cachedMaxY - cachedMinY) * scale) / 2;
 
         drawBeacons(canvas, scale, offX, offY);
+        drawGhostDots(canvas, scale, offX, offY);
         drawTrail(canvas, scale, offX, offY);
         drawDottedLineToClosest(canvas, scale, offX, offY, active);
         drawPosition(canvas, scale, offX, offY, active);
@@ -309,6 +345,25 @@ public class PositioningCanvasView extends View {
             if (parts.length >= 3) label = parts[1] + "," + parts[2];
             canvas.drawText(label, cx, cy - (isClosest ? 30f : 24f), labelPaint);
         }
+    }
+
+    private void drawGhostDots(Canvas canvas, double scale, double offX, double offY) {
+        drawOneGhost(canvas, scale, offX, offY, ghostA, "A", ghostAPaint);
+        drawOneGhost(canvas, scale, offX, offY, ghostC, "C", ghostCPaint);
+        drawOneGhost(canvas, scale, offX, offY, ghostD, "D", ghostDPaint);
+    }
+
+    private void drawOneGhost(Canvas canvas, double scale, double offX, double offY,
+                               String ghostUid, String label, Paint paint) {
+        if (ghostUid == null) return;
+        if (ghostUid.equals(closestBeaconKey)) return;
+        BeaconPos pos = beaconMap.get(ghostUid);
+        if (pos == null) return;
+
+        float cx = toScreenX(pos.x, scale, offX);
+        float cy = toScreenY(pos.y, scale, offY);
+        canvas.drawCircle(cx, cy, GHOST_RING_RADIUS, paint);
+        canvas.drawText(label, cx, cy + GHOST_RING_RADIUS + 16f, ghostLabelPaint);
     }
 
     private void drawTrail(Canvas canvas, double scale, double offX, double offY) {

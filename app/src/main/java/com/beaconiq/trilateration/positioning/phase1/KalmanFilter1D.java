@@ -8,8 +8,8 @@
 package com.beaconiq.trilateration.positioning.phase1;
 
 public class KalmanFilter1D {
-    private double q;
-    private double r;
+    private final double q;
+    private final double r;
     private Double x = null;
     private double p = 1.0;
 
@@ -28,12 +28,5 @@ public class KalmanFilter1D {
         x = x + k * (z - x);
         p = (1 - k) * p;
         return x;
-    }
-
-    public void reset(double newQ, double newR) {
-        this.q = newQ;
-        this.r = newR;
-        this.x = null;
-        this.p = 1.0;
     }
 }

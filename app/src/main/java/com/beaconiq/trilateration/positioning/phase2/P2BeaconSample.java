@@ -9,7 +9,7 @@ package com.beaconiq.trilateration.positioning.phase2;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-public class BeaconSample {
+public class P2BeaconSample {
 
     private final String uid;
     private double x;
@@ -18,18 +18,18 @@ public class BeaconSample {
     private final Deque<RssiSample> rssiBuffer = new ArrayDeque<>();
     public long lastSeen;
 
-    private final KalmanFilter1D distanceFilter;
-    private final KalmanFilter1D rssiFilter;
+    private final P2KalmanFilter1D distanceFilter;
+    private final P2KalmanFilter1D rssiFilter;
     private final int rssiBufferSize;
     private final long rssiTimeWindowMs;
 
     // Phase I constructor — hardcoded defaults matching original TEDtour
-    public BeaconSample(String uid, double x, double y) {
+    public P2BeaconSample(String uid, double x, double y) {
         this(uid, x, y, 0.05, 0.25, 20, 8000);
     }
 
     // Phase II constructor — all parameters configurable
-    public BeaconSample(String uid, double x, double y,
+    public P2BeaconSample(String uid, double x, double y,
                         double kalmanQ, double kalmanR,
                         int rssiBufferSize, long rssiTimeWindowMs) {
         this.uid = uid;
@@ -37,8 +37,8 @@ public class BeaconSample {
         this.y = y;
         this.rssiBufferSize = rssiBufferSize;
         this.rssiTimeWindowMs = rssiTimeWindowMs;
-        this.distanceFilter = new KalmanFilter1D(kalmanQ, kalmanR);
-        this.rssiFilter = new KalmanFilter1D(kalmanQ, kalmanR);
+        this.distanceFilter = new P2KalmanFilter1D(kalmanQ, kalmanR);
+        this.rssiFilter = new P2KalmanFilter1D(kalmanQ, kalmanR);
         this.lastSeen = System.currentTimeMillis();
     }
 

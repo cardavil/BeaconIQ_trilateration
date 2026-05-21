@@ -32,6 +32,8 @@ import com.beaconiq.trilateration.network.TestConsoleApi;
 import com.beaconiq.trilateration.positioning.phase1.BeaconSample;
 import com.beaconiq.trilateration.positioning.phase1.ProximityEngine;
 import com.beaconiq.trilateration.positioning.phase1.TrilaterationJavaSolver;
+import com.beaconiq.trilateration.positioning.phase2.P2BeaconSample;
+import com.beaconiq.trilateration.positioning.phase2.P2TrilaterationJavaSolver;
 import com.beaconiq.trilateration.scan.BleDevice;
 import com.beaconiq.trilateration.scan.BleScanner;
 import com.beaconiq.trilateration.storage.CalibrationStore;
@@ -160,7 +162,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     private final Map<String, BeaconSample> p1BeaconMap = new ConcurrentHashMap<>();
-    private final Map<String, com.beaconiq.trilateration.positioning.phase2.BeaconSample> p2BeaconMap = new ConcurrentHashMap<>();
+    private final Map<String, P2BeaconSample> p2BeaconMap = new ConcurrentHashMap<>();
     private CalibrationStore calibrationStore;
     private int autoPositionCounter;
     private String closestBeaconUid;
@@ -790,8 +792,10 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         updateModelStatusPanel();
         if (isPhaseTwo) {
             positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), estimatedPosition, closestBeaconUid);
+            positioningCanvas.updatePhaseOneGhosts(null, null, null);
         } else {
             positioningCanvas.update(new HashMap<>(p1BeaconMap), estimatedPosition, closestBeaconUid);
+            positioningCanvas.updatePhaseOneGhosts(radarClosestBeacon, legacyNearestBeacon, serviceClosestBeacon);
         }
     }
 
@@ -960,10 +964,10 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private String findStrongestBeaconByRawRssi() {
         String strongest = null;
         int maxRssi = Integer.MIN_VALUE;
-        for (Map.Entry<String, BeaconSample> entry : p1BeaconMap.entrySet()) {
-            int lastRssi = entry.getValue().getLastRawRssi();
-            if (lastRssi > maxRssi) {
-                maxRssi = lastRssi;
+        for (Map.Entry<String, Integer> entry : legacyBeaconRSSIMap.entrySet()) {
+            int rssi = entry.getValue();
+            if (rssi > maxRssi) {
+                maxRssi = rssi;
                 strongest = entry.getKey();
             }
         }
@@ -975,7 +979,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         if (solverIndex == 1) {
             estimatedPosition = estimatePositionWCL();
         } else {
-            estimatedPosition = com.beaconiq.trilateration.positioning.phase2.TrilaterationJavaSolver
+            estimatedPosition = P2TrilaterationJavaSolver
                     .estimatePosition(p2BeaconMap.values());
         }
 
@@ -990,7 +994,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
     private double[] estimatePositionWCL() {
         double sumWx = 0, sumWy = 0, sumW = 0;
-        for (com.beaconiq.trilateration.positioning.phase2.BeaconSample b : p2BeaconMap.values()) {
+        for (P2BeaconSample b : p2BeaconMap.values()) {
             Double d = b.getKalmanFilteredDistance(txPower, pathLossN, scaleFactor);
             if (d == null || d <= 0) continue;
             double w = 1.0 / (d * d);
@@ -1005,8 +1009,8 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private String findClosestToPosition(double[] pos) {
         String closest = null;
         double minDist = Double.MAX_VALUE;
-        for (Map.Entry<String, com.beaconiq.trilateration.positioning.phase2.BeaconSample> entry : p2BeaconMap.entrySet()) {
-            com.beaconiq.trilateration.positioning.phase2.BeaconSample b = entry.getValue();
+        for (Map.Entry<String, P2BeaconSample> entry : p2BeaconMap.entrySet()) {
+            P2BeaconSample b = entry.getValue();
             double dx = pos[0] - b.getX();
             double dy = pos[1] - b.getY();
             double d = Math.sqrt(dx * dx + dy * dy);
@@ -1021,7 +1025,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private int countActiveBeacons() {
         int count = 0;
         if (isPhaseTwo) {
-            for (com.beaconiq.trilateration.positioning.phase2.BeaconSample b : p2BeaconMap.values()) {
+            for (P2BeaconSample b : p2BeaconMap.values()) {
                 if (b.getKalmanFilteredDistance(txPower, pathLossN, scaleFactor) != null) count++;
             }
         } else {
@@ -1114,10 +1118,10 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         Double filteredRssi;
 
         if (isPhaseTwo) {
-            com.beaconiq.trilateration.positioning.phase2.BeaconSample sample = p2BeaconMap.get(compositeId);
+            P2BeaconSample sample = p2BeaconMap.get(compositeId);
             if (sample == null) {
                 double[] pos = getBeaconPosition(compositeId, beacon);
-                sample = new com.beaconiq.trilateration.positioning.phase2.BeaconSample(
+                sample = new P2BeaconSample(
                         compositeId, pos[0], pos[1],
                         kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
                 p2BeaconMap.put(compositeId, sample);

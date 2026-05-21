@@ -20,21 +20,21 @@ import java.util.Map;
  * - Find closest beacon whose influence radius contains the phone.
  * - Return UUID of that beacon or null if none in range.
  */
-public class TrilaterationJavaSolver {
+public class P2TrilaterationJavaSolver {
 
     private static final double INFLUENCE_RADIUS = 2.5; // meters
 
     /**
      * Estimate the phone position as a simple centroid of beacon coordinates.
      */
-    public static double[] estimatePosition(Collection<BeaconSample> beacons) {
+    public static double[] estimatePosition(Collection<P2BeaconSample> beacons) {
         if (beacons == null || beacons.size() < 3) return null;
 
         double sumX = 0;
         double sumY = 0;
         int count = 0;
 
-        for (BeaconSample b : beacons) {
+        for (P2BeaconSample b : beacons) {
             sumX += b.getX();
             sumY += b.getY();
             count++;
@@ -46,7 +46,7 @@ public class TrilaterationJavaSolver {
     /**
      * Return the UUID of the closest beacon that contains the phone in its influence radius.
      */
-    public static String findBeaconInInfluence(Collection<BeaconSample> beacons) {
+    public static String findBeaconInInfluence(Collection<P2BeaconSample> beacons) {
         if (beacons == null || beacons.size() < 3) return null;
 
         double[] phonePos = estimatePosition(beacons);
@@ -55,10 +55,10 @@ public class TrilaterationJavaSolver {
         double estX = phonePos[0];
         double estY = phonePos[1];
 
-        BeaconSample closestInRange = null;
+        P2BeaconSample closestInRange = null;
         double minDist = Double.MAX_VALUE;
 
-        for (BeaconSample b : beacons) {
+        for (P2BeaconSample b : beacons) {
             double dx = estX - b.getX();
             double dy = estY - b.getY();
             double distance = Math.sqrt(dx * dx + dy * dy);
@@ -73,11 +73,11 @@ public class TrilaterationJavaSolver {
         return (closestInRange != null) ? closestInRange.getUid() : null;
     }
 
-    public static String findClosestBeacon(Collection<BeaconSample> beacons) {
-        BeaconSample closest = null;
+    public static String findClosestBeacon(Collection<P2BeaconSample> beacons) {
+        P2BeaconSample closest = null;
         double minDist = Double.MAX_VALUE;
 
-        for (BeaconSample b : beacons) {
+        for (P2BeaconSample b : beacons) {
             Double d = b.getFilteredDistance();
             if (d == null) continue;
 
@@ -93,12 +93,12 @@ public class TrilaterationJavaSolver {
     }
 
     public static double[] estimatePositionWCL(
-            Collection<BeaconSample> beacons,
+            Collection<P2BeaconSample> beacons,
             double txPower, double pathLossN, double scaleFactor) {
         if (beacons == null || beacons.size() < 3) return null;
 
         double sumWx = 0, sumWy = 0, sumW = 0;
-        for (BeaconSample b : beacons) {
+        for (P2BeaconSample b : beacons) {
             Double d = b.getKalmanFilteredDistance(txPower, pathLossN, scaleFactor);
             if (d == null || d <= 0) continue;
             double w = 1.0 / (d * d);
@@ -111,12 +111,12 @@ public class TrilaterationJavaSolver {
     }
 
     public static String findClosestToPosition(
-            double[] pos, Map<String, BeaconSample> beaconMap) {
+            double[] pos, Map<String, P2BeaconSample> beaconMap) {
         if (pos == null || beaconMap == null) return null;
         String closest = null;
         double minDist = Double.MAX_VALUE;
-        for (Map.Entry<String, BeaconSample> entry : beaconMap.entrySet()) {
-            BeaconSample b = entry.getValue();
+        for (Map.Entry<String, P2BeaconSample> entry : beaconMap.entrySet()) {
+            P2BeaconSample b = entry.getValue();
             double dx = pos[0] - b.getX();
             double dy = pos[1] - b.getY();
             double d = Math.sqrt(dx * dx + dy * dy);

@@ -7,13 +7,13 @@
  */
 package com.beaconiq.trilateration.positioning.phase2;
 
-public class KalmanFilter1D {
+public class P2KalmanFilter1D {
     private final double q;
     private final double r;
     private Double x = null;
     private double p = 1.0;
 
-    public KalmanFilter1D(double q, double r) {
+    public P2KalmanFilter1D(double q, double r) {
         this.q = q;
         this.r = r;
     }

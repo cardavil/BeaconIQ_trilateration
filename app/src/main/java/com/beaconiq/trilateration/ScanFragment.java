@@ -31,8 +31,8 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.beaconiq.trilateration.positioning.phase2.BeaconSample;
-import com.beaconiq.trilateration.positioning.phase2.TrilaterationJavaSolver;
+import com.beaconiq.trilateration.positioning.phase2.P2BeaconSample;
+import com.beaconiq.trilateration.positioning.phase2.P2TrilaterationJavaSolver;
 import com.beaconiq.trilateration.scan.BleDevice;
 import com.beaconiq.trilateration.scan.BleScanner;
 import com.beaconiq.trilateration.sensor.OrientationSensor;
@@ -93,7 +93,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
     private PositioningCanvasView exploreCanvas;
     private CalibrationStore calibrationStore;
     private OrientationSensor orientationSensor;
-    private final Map<String, BeaconSample> beaconSampleMap = new ConcurrentHashMap<>();
+    private final Map<String, P2BeaconSample> beaconSampleMap = new ConcurrentHashMap<>();
     private int autoPositionCounter = 0;
 
     private View beaconBottomSheet;
@@ -282,16 +282,16 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
 
         double[] position;
         if (solverIndex == 1) {
-            position = TrilaterationJavaSolver.estimatePositionWCL(
+            position = P2TrilaterationJavaSolver.estimatePositionWCL(
                     beaconSampleMap.values(), txPower, pathLossN, scaleFactor);
         } else {
-            position = TrilaterationJavaSolver.estimatePosition(
+            position = P2TrilaterationJavaSolver.estimatePosition(
                     beaconSampleMap.values());
         }
 
         String closestKey = null;
         if (position != null) {
-            closestKey = TrilaterationJavaSolver.findClosestToPosition(
+            closestKey = P2TrilaterationJavaSolver.findClosestToPosition(
                     position, beaconSampleMap);
         }
 
@@ -397,10 +397,10 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
 
                 if (bleScanner != null && bleScanner.isScanning()) {
                     String compositeId = buildCompositeId(beacon);
-                    BeaconSample sample = beaconSampleMap.get(compositeId);
+                    P2BeaconSample sample = beaconSampleMap.get(compositeId);
                     if (sample == null) {
                         double[] pos = getBeaconPosition(compositeId, beacon);
-                        sample = new BeaconSample(compositeId, pos[0], pos[1],
+                        sample = new P2BeaconSample(compositeId, pos[0], pos[1],
                                 kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
                         beaconSampleMap.put(compositeId, sample);
                         if (!vibratedBeaconIds.contains(compositeId)) {
@@ -600,8 +600,8 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
 
     private void updateBeaconCards(String closestKey) {
         List<BeaconCardItem> cards = new ArrayList<>();
-        for (Map.Entry<String, BeaconSample> entry : beaconSampleMap.entrySet()) {
-            BeaconSample sample = entry.getValue();
+        for (Map.Entry<String, P2BeaconSample> entry : beaconSampleMap.entrySet()) {
+            P2BeaconSample sample = entry.getValue();
             String compositeId = entry.getKey();
             Double dist = sample.getKalmanFilteredDistance(txPower, pathLossN, scaleFactor);
             if (dist == null) continue;
