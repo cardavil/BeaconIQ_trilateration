@@ -14,7 +14,11 @@ import android.text.style.ForegroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -58,12 +62,18 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
     private int rssiThreshold = -100;
     private int solverIndex = 1; // 0=Centroid, 1=WCL
 
+    private static final String[] SOLVER_MODES = {"Centroid", "WCL"};
+
     private TextView statusText;
     private Button scanButton;
-    private View paramsRow;
-    private TextView paramsToggle;
-    private TextView paramsLabel;
     private BleScanner bleScanner;
+
+    private View headerParams, contentParams, headerDevices, contentDevices;
+    private TextView arrowParams, arrowDevices;
+    private EditText editTxPower, editPathLoss, editRssiThreshold;
+    private EditText editKalmanQ, editKalmanR, editRssiBuffer, editRssiWindow;
+    private EditText editScaleFactor, editBeaconTimeout, editEvalInterval;
+    private Spinner spinnerSolver;
     private DeviceListAdapter adapter;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean wasScanning;
@@ -109,21 +119,40 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         scanButton = view.findViewById(R.id.scan_button);
         RecyclerView deviceList = view.findViewById(R.id.device_list);
         exploreCanvas = view.findViewById(R.id.explore_canvas);
-        paramsRow = view.findViewById(R.id.params_row);
-        paramsToggle = view.findViewById(R.id.params_toggle);
-        paramsLabel = view.findViewById(R.id.params_label);
 
-        paramsToggle.setOnClickListener(v -> {
-            boolean hidden = paramsLabel.getVisibility() == View.GONE;
-            paramsLabel.setVisibility(hidden ? View.VISIBLE : View.GONE);
-            paramsToggle.setText(hidden ? "(x)" : "(?)");
-        });
+        headerParams = view.findViewById(R.id.header_params);
+        arrowParams = view.findViewById(R.id.arrow_params);
+        contentParams = view.findViewById(R.id.content_params);
+        headerDevices = view.findViewById(R.id.header_devices);
+        arrowDevices = view.findViewById(R.id.arrow_devices);
+        contentDevices = view.findViewById(R.id.content_devices);
+
+        editTxPower = view.findViewById(R.id.explore_edit_tx_power);
+        editPathLoss = view.findViewById(R.id.explore_edit_path_loss);
+        editRssiThreshold = view.findViewById(R.id.explore_edit_rssi_threshold);
+        editKalmanQ = view.findViewById(R.id.explore_edit_kalman_q);
+        editKalmanR = view.findViewById(R.id.explore_edit_kalman_r);
+        editRssiBuffer = view.findViewById(R.id.explore_edit_rssi_buffer);
+        editRssiWindow = view.findViewById(R.id.explore_edit_rssi_window);
+        editScaleFactor = view.findViewById(R.id.explore_edit_scale_factor);
+        editBeaconTimeout = view.findViewById(R.id.explore_edit_beacon_timeout);
+        editEvalInterval = view.findViewById(R.id.explore_edit_eval_interval);
+        spinnerSolver = view.findViewById(R.id.explore_spinner_solver);
+
+        ArrayAdapter<String> solverAdapter = new ArrayAdapter<>(requireContext(),
+                R.layout.spinner_item, SOLVER_MODES);
+        solverAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
+        spinnerSolver.setAdapter(solverAdapter);
 
         bleScanner = new BleScanner(requireContext());
         bleScanner.setListener(this);
 
         calibrationStore = new CalibrationStore(requireContext());
         loadPositioningParams();
+        setupParameterListeners();
+
+        headerParams.setOnClickListener(v -> toggleAccordion(contentParams, arrowParams));
+        headerDevices.setOnClickListener(v -> toggleAccordion(contentDevices, arrowDevices));
 
         orientationSensor = new OrientationSensor();
         orientationSensor.setListener((azimuth, pitch, roll) -> {
@@ -153,12 +182,11 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
 
             handler.removeCallbacks(positionEvalRunnable);
             exploreCanvas.setVisibility(View.GONE);
-            paramsRow.setVisibility(View.GONE);
             exploreCanvas.clear();
             beaconSampleMap.clear();
             autoPositionCounter = 0;
         } else {
-            loadPositioningParams();
+            applyAllParameters();
             bleScanner.startScan();
             scanButton.setText("Stop Scan");
             scanButton.setBackgroundTintList(ColorStateList.valueOf(
@@ -170,7 +198,6 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             autoPositionCounter = 0;
             exploreCanvas.clear();
             exploreCanvas.setVisibility(View.VISIBLE);
-            paramsRow.setVisibility(View.VISIBLE);
             handler.postDelayed(positionEvalRunnable, evalIntervalMs);
         }
     }
@@ -190,41 +217,18 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         rssiThreshold = prefs.getInt("debug_rssi_threshold", -100);
         solverIndex = prefs.getInt("debug_solver_index", 1);
 
-        if (paramsLabel != null) {
-            java.util.List<com.beaconiq.trilateration.model.Beacon> calibrated =
-                    calibrationStore != null
-                            ? calibrationStore.getAllBeacons()
-                            : java.util.Collections.emptyList();
-            String solverName = solverIndex == 1 ? "WCL" : "Centroid";
-
-            StringBuilder sb = new StringBuilder();
-            sb.append(String.format(Locale.US,
-                    "TX Power: %d dBm | Path Loss N: %.1f\n"
-                    + "RSSI Threshold: %d dBm\n"
-                    + "Kalman Q: %.3f | Kalman R: %.3f\n"
-                    + "RSSI Buffer: %d | RSSI Window: %dms\n"
-                    + "Scale Factor: %.1f\n"
-                    + "Solver: %s\n"
-                    + "Beacon Timeout: %dms | Eval Interval: %dms\n"
-                    + "Calibrated beacons: %d",
-                    txPower, pathLossN,
-                    rssiThreshold,
-                    kalmanQ, kalmanR,
-                    rssiBufferSize, rssiTimeWindowMs,
-                    scaleFactor,
-                    solverName,
-                    beaconTimeoutMs, evalIntervalMs,
-                    calibrated.size()));
-
-            if (!calibrated.isEmpty()) {
-                sb.append("\n— Beacons —");
-                for (com.beaconiq.trilateration.model.Beacon b : calibrated) {
-                    sb.append(String.format(Locale.US, "\n  %d,%d @ (%.1f, %.1f)",
-                            b.getMajor(), b.getMinor(), b.getX(), b.getY()));
-                }
-            }
-
-            paramsLabel.setText(sb.toString());
+        if (editTxPower != null) {
+            editTxPower.setText(String.valueOf(txPower));
+            editPathLoss.setText(String.format(Locale.US, "%.1f", pathLossN));
+            editRssiThreshold.setText(String.valueOf(rssiThreshold));
+            editKalmanQ.setText(String.format(Locale.US, "%.3f", kalmanQ));
+            editKalmanR.setText(String.format(Locale.US, "%.3f", kalmanR));
+            editRssiBuffer.setText(String.valueOf(rssiBufferSize));
+            editRssiWindow.setText(String.valueOf(rssiTimeWindowMs));
+            editScaleFactor.setText(String.format(Locale.US, "%.1f", scaleFactor));
+            editBeaconTimeout.setText(String.valueOf(beaconTimeoutMs));
+            editEvalInterval.setText(String.valueOf(evalIntervalMs));
+            spinnerSolver.setSelection(solverIndex);
         }
     }
 
@@ -305,7 +309,6 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         scanButton.setEnabled(false);
         handler.removeCallbacks(positionEvalRunnable);
         exploreCanvas.setVisibility(View.GONE);
-        paramsRow.setVisibility(View.GONE);
         exploreCanvas.clear();
         beaconSampleMap.clear();
     }
@@ -313,7 +316,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
     public void resumeAfterRecording() {
         scanButton.setEnabled(true);
         if (wasScanning) {
-            loadPositioningParams();
+            applyAllParameters();
             bleScanner.startScan();
             scanButton.setText("Stop Scan");
             scanButton.setBackgroundTintList(ColorStateList.valueOf(
@@ -325,7 +328,6 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             autoPositionCounter = 0;
             exploreCanvas.clear();
             exploreCanvas.setVisibility(View.VISIBLE);
-            paramsRow.setVisibility(View.VISIBLE);
             handler.postDelayed(positionEvalRunnable, evalIntervalMs);
         } else {
             setStatus("Idle", R.color.text_dim);
@@ -443,6 +445,89 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         }
         if (bleScanner != null && bleScanner.isScanning()) {
             bleScanner.stopScan();
+        }
+    }
+
+    // --- Accordion & parameter helpers ---
+
+    private void toggleAccordion(View content, TextView arrow) {
+        boolean collapsed = content.getVisibility() == View.GONE;
+        content.setVisibility(collapsed ? View.VISIBLE : View.GONE);
+        arrow.setText(collapsed ? "▼" : "▶");
+    }
+
+    private void setupParameterListeners() {
+        View.OnFocusChangeListener paramFocusListener = (v, hasFocus) -> {
+            if (!hasFocus) {
+                applyAllParameters();
+            }
+        };
+
+        EditText[] allFields = {editTxPower, editPathLoss, editRssiThreshold,
+                editKalmanQ, editKalmanR, editRssiBuffer, editRssiWindow,
+                editScaleFactor, editBeaconTimeout, editEvalInterval};
+        for (EditText et : allFields) {
+            et.setOnFocusChangeListener(paramFocusListener);
+        }
+
+        spinnerSolver.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                solverIndex = position;
+                saveBeaconConfig();
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+    }
+
+    private void applyAllParameters() {
+        txPower = readInt(editTxPower, -59, -100, 0);
+        pathLossN = readDouble(editPathLoss, 2.0, 1.0, 6.0);
+        rssiThreshold = readInt(editRssiThreshold, -100, -120, -20);
+        kalmanQ = readDouble(editKalmanQ, 0.05, 0.001, 1.0);
+        kalmanR = readDouble(editKalmanR, 0.25, 0.001, 5.0);
+        rssiBufferSize = readInt(editRssiBuffer, 20, 1, 100);
+        rssiTimeWindowMs = readInt(editRssiWindow, 8000, 500, 30000);
+        scaleFactor = readDouble(editScaleFactor, 5.0, 0.1, 50.0);
+        beaconTimeoutMs = readInt(editBeaconTimeout, 6000, 1000, 30000);
+        evalIntervalMs = readInt(editEvalInterval, 2000, 500, 30000);
+        solverIndex = spinnerSolver.getSelectedItemPosition();
+        saveBeaconConfig();
+    }
+
+    private void saveBeaconConfig() {
+        requireContext().getSharedPreferences(PREFS_BEACON, 0)
+                .edit()
+                .putInt("debug_default_tx_power", txPower)
+                .putFloat("debug_path_loss_n", (float) pathLossN)
+                .putInt("debug_rssi_threshold", rssiThreshold)
+                .putFloat("debug_kalman_q", (float) kalmanQ)
+                .putFloat("debug_kalman_r", (float) kalmanR)
+                .putInt("debug_rssi_buffer_size", rssiBufferSize)
+                .putInt("debug_rssi_time_window_ms", (int) rssiTimeWindowMs)
+                .putFloat("debug_scale_factor", (float) scaleFactor)
+                .putInt("debug_beacon_timeout_ms", (int) beaconTimeoutMs)
+                .putInt("debug_eval_interval_ms", (int) evalIntervalMs)
+                .putInt("debug_solver_index", solverIndex)
+                .apply();
+    }
+
+    private int readInt(EditText field, int defaultVal, int min, int max) {
+        try {
+            int val = Integer.parseInt(field.getText().toString().trim());
+            return Math.max(min, Math.min(max, val));
+        } catch (NumberFormatException e) {
+            return defaultVal;
+        }
+    }
+
+    private double readDouble(EditText field, double defaultVal, double min, double max) {
+        try {
+            double val = Double.parseDouble(field.getText().toString().trim());
+            return Math.max(min, Math.min(max, val));
+        } catch (NumberFormatException e) {
+            return defaultVal;
         }
     }
 }
