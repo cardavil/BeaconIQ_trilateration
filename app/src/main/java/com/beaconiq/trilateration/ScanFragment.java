@@ -64,13 +64,13 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
 
     private int txPower = -59;
     private double pathLossN = 2.0;
-    private double scaleFactor = 5.0;
+    private double scaleFactor = 1.0;
     private double kalmanQ = 0.05;
     private double kalmanR = 0.25;
     private int rssiBufferSize = 20;
     private long rssiTimeWindowMs = 8000;
-    private long beaconTimeoutMs = 6000;
-    private long evalIntervalMs = 2000;
+    private long beaconTimeoutMs = 4000;
+    private long evalIntervalMs = 3000;
     private int rssiThreshold = -100;
     private int solverIndex = 1; // 0=Centroid, 1=WCL
 
@@ -251,13 +251,13 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
                 .getSharedPreferences(PREFS_BEACON, 0);
         txPower = prefs.getInt("debug_default_tx_power", -59);
         pathLossN = prefs.getFloat("debug_path_loss_n", 2.0f);
-        scaleFactor = prefs.getFloat("debug_scale_factor", 5.0f);
+        scaleFactor = prefs.getFloat("debug_scale_factor", 1.0f);
         kalmanQ = prefs.getFloat("debug_kalman_q", 0.05f);
         kalmanR = prefs.getFloat("debug_kalman_r", 0.25f);
         rssiBufferSize = prefs.getInt("debug_rssi_buffer_size", 20);
         rssiTimeWindowMs = prefs.getInt("debug_rssi_time_window_ms", 8000);
-        beaconTimeoutMs = prefs.getInt("debug_beacon_timeout_ms", 6000);
-        evalIntervalMs = prefs.getInt("debug_eval_interval_ms", 2000);
+        beaconTimeoutMs = prefs.getInt("debug_beacon_timeout_ms", 4000);
+        evalIntervalMs = prefs.getInt("debug_eval_interval_ms", 3000);
         rssiThreshold = prefs.getInt("debug_rssi_threshold", -100);
         solverIndex = prefs.getInt("debug_solver_index", 1);
 
