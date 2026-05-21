@@ -50,7 +50,6 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -759,11 +758,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         long now = System.currentTimeMillis();
 
         if (isPhaseTwo) {
-            Iterator<Map.Entry<String, com.beaconiq.trilateration.positioning.phase2.BeaconSample>> p2It =
-                    p2BeaconMap.entrySet().iterator();
-            while (p2It.hasNext()) {
-                if (now - p2It.next().getValue().lastSeen > beaconTimeoutMs) p2It.remove();
-            }
+            p2BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
             // Phase II: simple active-beacon count
             int active = countActiveBeacons();
             if (active < 3) {
@@ -774,11 +769,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
                 evaluatePhaseTwo();
             }
         } else {
-            Iterator<Map.Entry<String, BeaconSample>> p1It =
-                    p1BeaconMap.entrySet().iterator();
-            while (p1It.hasNext()) {
-                if (now - p1It.next().getValue().lastSeen > beaconTimeoutMs) p1It.remove();
-            }
+            p1BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
             // Phase I: 1:1 original RadarScanActivity.positioningRunnable logic
             int validBeaconCount = p1BeaconMap.size();
             Log.d(TAG, "P1 Beacon count: " + validBeaconCount);
