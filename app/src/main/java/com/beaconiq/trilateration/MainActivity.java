@@ -29,8 +29,8 @@ public class MainActivity extends AppCompatActivity {
     private MaterialToolbar toolbar;
     private TextView toolbarScreen;
     private ScanFragment scanFragment;
-    private TestFragment testFragmentP1;
-    private TestFragment testFragmentP2;
+    private PhaseOneTestFragment testFragmentP1;
+    private PhaseTwoTestFragment testFragmentP2;
     private SettingsFragment settingsFragment;
     private Fragment activeFragment;
 
@@ -58,15 +58,8 @@ public class MainActivity extends AppCompatActivity {
         if (savedInstanceState == null) {
             scanFragment = new ScanFragment();
 
-            testFragmentP1 = new TestFragment();
-            Bundle argsP1 = new Bundle();
-            argsP1.putInt("model_phase", 1);
-            testFragmentP1.setArguments(argsP1);
-
-            testFragmentP2 = new TestFragment();
-            Bundle argsP2 = new Bundle();
-            argsP2.putInt("model_phase", 2);
-            testFragmentP2.setArguments(argsP2);
+            testFragmentP1 = new PhaseOneTestFragment();
+            testFragmentP2 = new PhaseTwoTestFragment();
 
             settingsFragment = new SettingsFragment();
 
@@ -85,8 +78,8 @@ public class MainActivity extends AppCompatActivity {
         } else {
             FragmentManager fm = getSupportFragmentManager();
             scanFragment = (ScanFragment) fm.findFragmentByTag("scan");
-            testFragmentP1 = (TestFragment) fm.findFragmentByTag("test_p1");
-            testFragmentP2 = (TestFragment) fm.findFragmentByTag("test_p2");
+            testFragmentP1 = (PhaseOneTestFragment) fm.findFragmentByTag("test_p1");
+            testFragmentP2 = (PhaseTwoTestFragment) fm.findFragmentByTag("test_p2");
             settingsFragment = (SettingsFragment) fm.findFragmentByTag("settings");
             activeFragment = scanFragment;
             setScreenName("Explore");

@@ -33,15 +33,12 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
 import com.beaconiq.trilateration.network.TestConsoleApi;
-import com.beaconiq.trilateration.positioning.phase1.BeaconSample;
-import com.beaconiq.trilateration.positioning.phase1.ProximityEngine;
-import com.beaconiq.trilateration.positioning.phase1.TrilaterationJavaSolver;
 import com.beaconiq.trilateration.positioning.phase2.P2BeaconSample;
 import com.beaconiq.trilateration.positioning.phase2.P2TrilaterationJavaSolver;
 import com.beaconiq.trilateration.scan.BleDevice;
 import com.beaconiq.trilateration.scan.BleScanner;
-import com.beaconiq.trilateration.storage.CalibrationStore;
 import com.beaconiq.trilateration.sensor.OrientationSensor;
+import com.beaconiq.trilateration.storage.CalibrationStore;
 import com.beaconiq.trilateration.ui.PositioningCanvasView;
 
 import org.altbeacon.beacon.Beacon;
@@ -64,7 +61,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class TestFragment extends Fragment implements BleScanner.ScanListener {
+public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanListener {
 
     private static final String TAG = "BeaconIQ.TestConsole";
     private static final String PREFS_BEACON = "debug_panel";
@@ -87,13 +84,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private static final int DEFAULT_RSSI_BUFFER_SIZE = 20;
     private static final long DEFAULT_RSSI_TIME_WINDOW_MS = 8000;
 
-    // Original RadarScanActivity scan modes (only REAL is active)
-    @SuppressWarnings("unused")
-    private enum ScanMode { SIMULATED, JAVA, PYTHON, REAL }
-    private static final ScanMode SCAN_MODE = ScanMode.REAL;
-
-    // Original RadarScanActivity.PositionState
-    private enum PositionState { SEARCHING, POSITIONING, INSIDE_ZONE }
+    // --- UI fields ---
 
     private EditText editAnalyst, editDuration, editRoom, editNotes;
     private EditText editTxPower, editPathLoss, editRssiThreshold;
@@ -101,6 +92,8 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private EditText editScaleFactor, editBeaconTimeout, editEvalInterval;
     private Spinner spinnerMovement, spinnerPhonePosition, spinnerSolver;
     private View solverSection, modelParamsSection;
+
+    // --- Model parameters ---
 
     private int txPower = -59;
     private double pathLossN = 2.0;
@@ -116,10 +109,10 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private long modelEvalIntervalMs = DEFAULT_MODEL_EVAL_INTERVAL_MS;
     private int savedSolverIndex = 1;
 
+    // --- Session state ---
+
     private View formSection;
     private Button btnStartSession;
-
-    private boolean isPhaseTwo = false;
 
     private View modelStatusPanel;
     private TextView tvClosest, tvState, tvBeaconCount;
@@ -165,42 +158,62 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    private final Map<String, BeaconSample> p1BeaconMap = new ConcurrentHashMap<>();
-    private final Map<String, P2BeaconSample> p2BeaconMap = new ConcurrentHashMap<>();
     private CalibrationStore calibrationStore;
     private int autoPositionCounter;
     private String closestBeaconUid;
     private String modelState = "SEARCHING";
     private double[] estimatedPosition;
 
-    // Phase I: three original TEDtour systems reproduced
-    private PositionState currentPositionState = PositionState.SEARCHING;
-    private ProximityEngine proximityEngine;          // BUG#2: instantiated, never evaluated
-    private final Map<String, Integer> legacyBeaconRSSIMap = new ConcurrentHashMap<>();
-    private String legacyNearestBeacon;               // BUG#3: ScanActivity inverted RSSI
-    private String currentNearestBeacon;              // ScanActivity change detection
-    private String radarClosestBeacon;                // System A: RadarScanActivity result
-    private String serviceClosestBeacon;              // System D: BeaconScanService result
-    private String lastNotifiedBeaconUuid;            // enterZone dedup (original behavior)
-    private String activeStandUuid;                   // original RadarScanActivity.activeStandUuid
-    private boolean isDetailActivityOpen;             // original enterZone() guard
-    private String currentClosestUuid;                // BeaconScanService.currentClosestUuid
-
     private OrientationSensor orientationSensor;
 
-    private boolean isCalibrating;
     private Button btnCalibrate;
     private TextView tvCalibrationStatus;
 
     private final Handler modelHandler = new Handler(Looper.getMainLooper());
+
+    // --- P2-specific state ---
+
+    private final Map<String, P2BeaconSample> p2BeaconMap = new ConcurrentHashMap<>();
+    private boolean isCalibrationActive;
+
+    // --- Runnables ---
+
     private final Runnable modelEvalRunnable = new Runnable() {
         @Override
         public void run() {
             if (!isRecording) return;
-            evaluateModel();
+            runModelEvaluation();
             modelHandler.postDelayed(this, modelEvalIntervalMs);
         }
     };
+
+    private final Runnable calibrationEvalRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isCalibrationActive) return;
+            long now = System.currentTimeMillis();
+            p2BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
+
+            double[] position = null;
+            String closestKey = null;
+            int solIdx = spinnerSolver.getSelectedItemPosition();
+            if (solIdx == 1) {
+                position = estimatePositionWCL();
+            } else {
+                position = P2TrilaterationJavaSolver.estimatePosition(p2BeaconMap.values());
+            }
+            if (position != null) {
+                closestKey = findClosestToPosition(position);
+            }
+
+            updateCalibratedKeys();
+            updateCalibrationStatusLine();
+            positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), position, closestKey);
+            modelHandler.postDelayed(this, modelEvalIntervalMs);
+        }
+    };
+
+    // --- Lifecycle ---
 
     @Nullable
     @Override
@@ -214,13 +227,11 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         super.onViewCreated(view, savedInstanceState);
         calibrationStore = new CalibrationStore(requireContext());
         initViews(view);
-        loadPreferences();
+        loadSessionFormPrefs();
         setupListeners(view);
         initToggle(view);
 
-        Bundle args = getArguments();
-        isPhaseTwo = (args != null && args.getInt("model_phase", 1) == 2);
-        applyPhaseConfig();
+        applyP2Config();
 
         bleScanner = new BleScanner(requireContext());
         bleScanner.setListener(this);
@@ -236,13 +247,41 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
                 editAnalyst.getText().toString().trim().length() > 0);
 
         positioningCanvas.setOnBeaconTapListener((compositeId, currentX, currentY) -> {
-            if (isCalibrating) {
+            if (isCalibrationActive) {
                 showCalibrationDialog(compositeId, currentX, currentY);
             }
         });
 
         btnCalibrate.setOnClickListener(v -> toggleCalibrationMode());
     }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (isCalibrationActive) {
+            stopCalibrationMode();
+        }
+        if (isRecording) {
+            endSession();
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        modelHandler.removeCallbacks(calibrationEvalRunnable);
+        timerHandler.removeCallbacks(timerRunnable);
+        modelHandler.removeCallbacks(modelEvalRunnable);
+        if (orientationSensor != null) {
+            orientationSensor.stop();
+        }
+        if (bleScanner != null && bleScanner.isScanning()) {
+            bleScanner.stopScan();
+        }
+        executor.shutdown();
+    }
+
+    // --- UI init ---
 
     private void initViews(View view) {
         formSection = view.findViewById(R.id.form_section);
@@ -291,38 +330,12 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         btnCalibrate = view.findViewById(R.id.btn_calibrate);
     }
 
-    private void loadPreferences() {
-        SharedPreferences beaconPrefs = requireContext()
-                .getSharedPreferences(PREFS_BEACON, Context.MODE_PRIVATE);
+    private void loadSessionFormPrefs() {
         SharedPreferences tcPrefs = requireContext()
                 .getSharedPreferences(PREFS_TEST_CONSOLE, Context.MODE_PRIVATE);
-
-        txPower = beaconPrefs.getInt("debug_default_tx_power", -59);
-        pathLossN = beaconPrefs.getFloat("debug_path_loss_n", 2.0f);
-        rssiThreshold = beaconPrefs.getInt("debug_rssi_threshold", -100);
-        kalmanQ = beaconPrefs.getFloat("debug_kalman_q", (float) DEFAULT_KALMAN_Q);
-        kalmanR = beaconPrefs.getFloat("debug_kalman_r", (float) DEFAULT_KALMAN_R);
-        rssiBufferSize = beaconPrefs.getInt("debug_rssi_buffer_size", DEFAULT_RSSI_BUFFER_SIZE);
-        rssiTimeWindowMs = beaconPrefs.getInt("debug_rssi_time_window_ms", (int) DEFAULT_RSSI_TIME_WINDOW_MS);
-        scaleFactor = beaconPrefs.getFloat("debug_scale_factor", (float) DEFAULT_SCALE_FACTOR);
-        beaconTimeoutMs = beaconPrefs.getInt("debug_beacon_timeout_ms", (int) DEFAULT_BEACON_TIMEOUT_MS);
-        modelEvalIntervalMs = beaconPrefs.getInt("debug_eval_interval_ms", (int) DEFAULT_MODEL_EVAL_INTERVAL_MS);
-        savedSolverIndex = beaconPrefs.getInt("debug_solver_index", 1);
-
-        editTxPower.setText(String.valueOf(txPower));
-        editPathLoss.setText(String.format(Locale.US, "%.1f", pathLossN));
-        editRssiThreshold.setText(String.valueOf(rssiThreshold));
-        editKalmanQ.setText(String.format(Locale.US, "%.3f", kalmanQ));
-        editKalmanR.setText(String.format(Locale.US, "%.3f", kalmanR));
-        editRssiBuffer.setText(String.valueOf(rssiBufferSize));
-        editRssiWindow.setText(String.valueOf(rssiTimeWindowMs));
-        editScaleFactor.setText(String.format(Locale.US, "%.1f", scaleFactor));
-        editBeaconTimeout.setText(String.valueOf(beaconTimeoutMs));
-        editEvalInterval.setText(String.valueOf(modelEvalIntervalMs));
-        editDuration.setText(String.valueOf(selectedDurationSec));
-
         editAnalyst.setText(tcPrefs.getString("analyst_name", ""));
         editRoom.setText(tcPrefs.getString("room_name", ""));
+        editDuration.setText(String.valueOf(selectedDurationSec));
     }
 
     private void setupListeners(View view) {
@@ -354,7 +367,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
             editKalmanR.setText("0.250");
             editRssiBuffer.setText("20");
             editRssiWindow.setText("8000");
-            editScaleFactor.setText("5.0");
+            editScaleFactor.setText("1.0");
             editBeaconTimeout.setText("4000");
             editEvalInterval.setText("3000");
         });
@@ -386,49 +399,6 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         });
     }
 
-    private void applyPhaseConfig() {
-        int textPrimary = ContextCompat.getColor(requireContext(), R.color.text_primary);
-        int textDim = ContextCompat.getColor(requireContext(), R.color.text_dim);
-
-        editTxPower.setEnabled(isPhaseTwo);
-        editPathLoss.setEnabled(isPhaseTwo);
-        editRssiThreshold.setEnabled(isPhaseTwo);
-        int cfgColor = isPhaseTwo ? textPrimary : textDim;
-        editTxPower.setTextColor(cfgColor);
-        editPathLoss.setTextColor(cfgColor);
-        editRssiThreshold.setTextColor(cfgColor);
-
-        EditText[] advancedFields = {editKalmanQ, editKalmanR, editRssiBuffer,
-                editRssiWindow, editScaleFactor, editBeaconTimeout, editEvalInterval};
-        for (EditText et : advancedFields) {
-            et.setEnabled(isPhaseTwo);
-            et.setTextColor(cfgColor);
-        }
-
-        modelParamsSection.setVisibility(View.VISIBLE);
-
-        if (isPhaseTwo) {
-            solverSection.setVisibility(View.VISIBLE);
-            ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
-                    R.layout.spinner_item, SOLVER_MODES_P2);
-            adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
-            spinnerSolver.setAdapter(adapter);
-            spinnerSolver.setSelection(savedSolverIndex);
-
-            tvKalmanStatus.setText("Kalman: ON (q=" + kalmanQ + ", r=" + kalmanR + ")");
-            tvSolverStatus.setText("Solver: " + (savedSolverIndex == 1 ? "WCL" : "Centroid"));
-            tvEngineStatus.setText("ProximityEngine: not used (direct solver)");
-            tvCalibrationStatus.setText("Calibrated: 0/0");
-        } else {
-            solverSection.setVisibility(View.GONE);
-
-            tvKalmanStatus.setText("Kalman: OFF (bypassed in BeaconSample)");
-            tvSolverStatus.setText("Solver: findClosestBeacon (no x,y calculated)");
-            tvEngineStatus.setText("ProximityEngine: instantiated, never called");
-            tvCalibrationStatus.setVisibility(View.GONE);
-        }
-    }
-
     private void setTab(boolean newSession) {
         if (isRecording) return;
 
@@ -450,6 +420,105 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
             loadHistory();
         }
     }
+
+    // --- P2 config ---
+
+    private void applyP2Config() {
+        loadModelPreferences();
+
+        modelParamsSection.setVisibility(View.VISIBLE);
+
+        solverSection.setVisibility(View.VISIBLE);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
+                R.layout.spinner_item, SOLVER_MODES_P2);
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
+        spinnerSolver.setAdapter(adapter);
+        spinnerSolver.setSelection(savedSolverIndex);
+
+        tvKalmanStatus.setText("Kalman: ON (q=" + kalmanQ + ", r=" + kalmanR + ")");
+        tvSolverStatus.setText("Solver: " + (savedSolverIndex == 1 ? "WCL" : "Centroid"));
+        tvEngineStatus.setText("ProximityEngine: not used (direct solver)");
+        tvCalibrationStatus.setText("Calibrated: 0/0");
+        btnCalibrate.setVisibility(View.VISIBLE);
+    }
+
+    private void loadModelPreferences() {
+        SharedPreferences beaconPrefs = requireContext()
+                .getSharedPreferences(PREFS_BEACON, Context.MODE_PRIVATE);
+
+        txPower = beaconPrefs.getInt("debug_default_tx_power", -59);
+        pathLossN = beaconPrefs.getFloat("debug_path_loss_n", 2.0f);
+        rssiThreshold = beaconPrefs.getInt("debug_rssi_threshold", -100);
+        kalmanQ = beaconPrefs.getFloat("debug_kalman_q", (float) DEFAULT_KALMAN_Q);
+        kalmanR = beaconPrefs.getFloat("debug_kalman_r", (float) DEFAULT_KALMAN_R);
+        rssiBufferSize = beaconPrefs.getInt("debug_rssi_buffer_size", DEFAULT_RSSI_BUFFER_SIZE);
+        rssiTimeWindowMs = beaconPrefs.getInt("debug_rssi_time_window_ms", (int) DEFAULT_RSSI_TIME_WINDOW_MS);
+        scaleFactor = beaconPrefs.getFloat("debug_scale_factor", (float) DEFAULT_SCALE_FACTOR);
+        beaconTimeoutMs = beaconPrefs.getInt("debug_beacon_timeout_ms", (int) DEFAULT_BEACON_TIMEOUT_MS);
+        modelEvalIntervalMs = beaconPrefs.getInt("debug_eval_interval_ms", (int) DEFAULT_MODEL_EVAL_INTERVAL_MS);
+        savedSolverIndex = beaconPrefs.getInt("debug_solver_index", 1);
+
+        editTxPower.setText(String.valueOf(txPower));
+        editPathLoss.setText(String.format(Locale.US, "%.1f", pathLossN));
+        editRssiThreshold.setText(String.valueOf(rssiThreshold));
+        editKalmanQ.setText(String.format(Locale.US, "%.3f", kalmanQ));
+        editKalmanR.setText(String.format(Locale.US, "%.3f", kalmanR));
+        editRssiBuffer.setText(String.valueOf(rssiBufferSize));
+        editRssiWindow.setText(String.valueOf(rssiTimeWindowMs));
+        editScaleFactor.setText(String.format(Locale.US, "%.1f", scaleFactor));
+        editBeaconTimeout.setText(String.valueOf(beaconTimeoutMs));
+        editEvalInterval.setText(String.valueOf(modelEvalIntervalMs));
+    }
+
+    private void saveBeaconConfig() {
+        requireContext().getSharedPreferences(PREFS_BEACON, Context.MODE_PRIVATE)
+                .edit()
+                .putInt("debug_default_tx_power", txPower)
+                .putFloat("debug_path_loss_n", (float) pathLossN)
+                .putInt("debug_rssi_threshold", rssiThreshold)
+                .putFloat("debug_kalman_q", (float) kalmanQ)
+                .putFloat("debug_kalman_r", (float) kalmanR)
+                .putInt("debug_rssi_buffer_size", rssiBufferSize)
+                .putInt("debug_rssi_time_window_ms", (int) rssiTimeWindowMs)
+                .putFloat("debug_scale_factor", (float) scaleFactor)
+                .putInt("debug_beacon_timeout_ms", (int) beaconTimeoutMs)
+                .putInt("debug_eval_interval_ms", (int) modelEvalIntervalMs)
+                .putInt("debug_solver_index", spinnerSolver.getSelectedItemPosition())
+                .apply();
+    }
+
+    private void readSessionParams() {
+        txPower = readInt(editTxPower, -59, -100, 0);
+        pathLossN = readDouble(editPathLoss, 2.0, 1.0, 6.0);
+        rssiThreshold = readInt(editRssiThreshold, -100, -120, -20);
+        kalmanQ = readDouble(editKalmanQ, DEFAULT_KALMAN_Q, 0.001, 1.0);
+        kalmanR = readDouble(editKalmanR, DEFAULT_KALMAN_R, 0.001, 5.0);
+        rssiBufferSize = readInt(editRssiBuffer, DEFAULT_RSSI_BUFFER_SIZE, 1, 100);
+        rssiTimeWindowMs = readInt(editRssiWindow, (int) DEFAULT_RSSI_TIME_WINDOW_MS, 500, 30000);
+        scaleFactor = readDouble(editScaleFactor, DEFAULT_SCALE_FACTOR, 0.1, 50.0);
+        beaconTimeoutMs = readInt(editBeaconTimeout, (int) DEFAULT_BEACON_TIMEOUT_MS, 1000, 30000);
+        modelEvalIntervalMs = readInt(editEvalInterval, (int) DEFAULT_MODEL_EVAL_INTERVAL_MS, 500, 30000);
+    }
+
+    private int readInt(EditText field, int defaultVal, int min, int max) {
+        try {
+            int val = Integer.parseInt(field.getText().toString().trim());
+            return Math.max(min, Math.min(max, val));
+        } catch (NumberFormatException e) {
+            return defaultVal;
+        }
+    }
+
+    private double readDouble(EditText field, double defaultVal, double min, double max) {
+        try {
+            double val = Double.parseDouble(field.getText().toString().trim());
+            return Math.max(min, Math.min(max, val));
+        } catch (NumberFormatException e) {
+            return defaultVal;
+        }
+    }
+
+    // --- History ---
 
     private void loadHistory() {
         historyStatus.setText("Loading...");
@@ -523,39 +592,18 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         historyList.addView(row);
     }
 
+    // --- Session recording ---
+
     @SuppressLint("MissingPermission")
     private void startSession() {
-        if (isCalibrating) {
+        if (isCalibrationActive) {
             stopCalibrationMode();
         }
         String analyst = editAnalyst.getText().toString().trim();
         if (analyst.isEmpty()) return;
 
         selectedDurationSec = readInt(editDuration, 60, 5, 600);
-        if (isPhaseTwo) {
-            txPower = readInt(editTxPower, -59, -100, 0);
-            pathLossN = readDouble(editPathLoss, 2.0, 1.0, 6.0);
-            rssiThreshold = readInt(editRssiThreshold, -100, -120, -20);
-            kalmanQ = readDouble(editKalmanQ, DEFAULT_KALMAN_Q, 0.001, 1.0);
-            kalmanR = readDouble(editKalmanR, DEFAULT_KALMAN_R, 0.001, 5.0);
-            rssiBufferSize = readInt(editRssiBuffer, DEFAULT_RSSI_BUFFER_SIZE, 1, 100);
-            rssiTimeWindowMs = readInt(editRssiWindow, (int) DEFAULT_RSSI_TIME_WINDOW_MS, 500, 30000);
-            scaleFactor = readDouble(editScaleFactor, DEFAULT_SCALE_FACTOR, 0.1, 50.0);
-            beaconTimeoutMs = readInt(editBeaconTimeout, (int) DEFAULT_BEACON_TIMEOUT_MS, 1000, 30000);
-            modelEvalIntervalMs = readInt(editEvalInterval, (int) DEFAULT_MODEL_EVAL_INTERVAL_MS, 500, 30000);
-        } else {
-            txPower = -59;
-            pathLossN = 2.0;
-            rssiThreshold = -100;
-            kalmanQ = DEFAULT_KALMAN_Q;
-            kalmanR = DEFAULT_KALMAN_R;
-            rssiBufferSize = DEFAULT_RSSI_BUFFER_SIZE;
-            rssiTimeWindowMs = DEFAULT_RSSI_TIME_WINDOW_MS;
-            scaleFactor = DEFAULT_SCALE_FACTOR;
-            beaconTimeoutMs = DEFAULT_BEACON_TIMEOUT_MS;
-            modelEvalIntervalMs = DEFAULT_MODEL_EVAL_INTERVAL_MS;
-        }
-
+        readSessionParams();
         saveBeaconConfig();
         ((MainActivity) requireActivity()).stopScannerForRecording();
 
@@ -569,26 +617,15 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         ibeaconHits = 0;
         rejectedCount = 0;
 
-        p1BeaconMap.clear();
-        p2BeaconMap.clear();
-        legacyBeaconRSSIMap.clear();
-        legacyNearestBeacon = null;
-        currentNearestBeacon = null;
-        radarClosestBeacon = null;
-        serviceClosestBeacon = null;
-        lastNotifiedBeaconUuid = null;
-        activeStandUuid = null;
-        isDetailActivityOpen = false;
-        currentClosestUuid = null;
-        proximityEngine = null;
-        currentPositionState = PositionState.SEARCHING;
         autoPositionCounter = 0;
         closestBeaconUid = null;
         modelState = "SEARCHING";
         estimatedPosition = null;
 
-        formSection.setVisibility(View.GONE);
+        p2BeaconMap.clear();
         btnCalibrate.setVisibility(View.GONE);
+
+        formSection.setVisibility(View.GONE);
         positioningCanvas.clear();
 
         updateModelStatusPanel();
@@ -601,11 +638,11 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         timerHandler.postDelayed(timerRunnable, 1000);
         modelHandler.postDelayed(modelEvalRunnable, modelEvalIntervalMs);
 
-        if (isPhaseTwo && orientationSensor != null) {
+        if (orientationSensor != null) {
             orientationSensor.start(requireActivity());
         }
 
-        Log.d(TAG, "Session started: phase=" + (isPhaseTwo ? "II" : "I")
+        Log.d(TAG, "Session started: phase=phase_2"
                 + " duration=" + selectedDurationSec + "s");
     }
 
@@ -684,7 +721,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         session.put("total_scan_results", totalScanResults);
         session.put("ibeacon_hits", ibeaconHits);
         session.put("rejected_count", rejectedCount);
-        session.put("model_phase", isPhaseTwo ? "phase_2" : "phase_1");
+        session.put("model_phase", "phase_2");
         session.put("kalman_q", kalmanQ);
         session.put("kalman_r", kalmanR);
         session.put("rssi_buffer_size", rssiBufferSize);
@@ -720,7 +757,6 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
     private void resetForm() {
         formSection.setVisibility(View.VISIBLE);
-        btnCalibrate.setVisibility(View.VISIBLE);
         positioningCanvas.clear();
 
         btnStartSession.setText("Start Session");
@@ -734,279 +770,185 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         ibeaconHits = 0;
         rejectedCount = 0;
 
-        p1BeaconMap.clear();
-        p2BeaconMap.clear();
-        legacyBeaconRSSIMap.clear();
-        legacyNearestBeacon = null;
-        currentNearestBeacon = null;
-        radarClosestBeacon = null;
-        serviceClosestBeacon = null;
-        lastNotifiedBeaconUuid = null;
-        activeStandUuid = null;
-        isDetailActivityOpen = false;
-        currentClosestUuid = null;
-        proximityEngine = null;
-        currentPositionState = PositionState.SEARCHING;
         closestBeaconUid = null;
         modelState = "SEARCHING";
         estimatedPosition = null;
+
+        p2BeaconMap.clear();
+        btnCalibrate.setVisibility(View.VISIBLE);
     }
 
-    private void saveBeaconConfig() {
-        requireContext().getSharedPreferences(PREFS_BEACON, Context.MODE_PRIVATE)
-                .edit()
-                .putInt("debug_default_tx_power", txPower)
-                .putFloat("debug_path_loss_n", (float) pathLossN)
-                .putInt("debug_rssi_threshold", rssiThreshold)
-                .putFloat("debug_kalman_q", (float) kalmanQ)
-                .putFloat("debug_kalman_r", (float) kalmanR)
-                .putInt("debug_rssi_buffer_size", rssiBufferSize)
-                .putInt("debug_rssi_time_window_ms", (int) rssiTimeWindowMs)
-                .putFloat("debug_scale_factor", (float) scaleFactor)
-                .putInt("debug_beacon_timeout_ms", (int) beaconTimeoutMs)
-                .putInt("debug_eval_interval_ms", (int) modelEvalIntervalMs)
-                .putInt("debug_solver_index", spinnerSolver.getSelectedItemPosition())
-                .apply();
+    // --- Status panel ---
+
+    private void updateModelStatusPanel() {
+        int active = countActiveP2Beacons();
+        String uid = closestBeaconUid != null ? shortUid(closestBeaconUid) : "---";
+
+        tvClosest.setText("Closest: " + uid);
+        tvState.setText("State: " + modelState);
+        tvBeaconCount.setText("Beacons: " + active + " / 3 required");
+
+        tvKalmanStatus.setText("Kalman: ON (q=" + kalmanQ + ", r=" + kalmanR + ")");
+        String solver = spinnerSolver.getSelectedItemPosition() == 1
+                ? "WCL" : "Centroid";
+        tvSolverStatus.setText("Solver: " + solver);
+        tvEngineStatus.setText("ProximityEngine: not used (direct solver)");
     }
 
-    private int readInt(EditText field, int defaultVal, int min, int max) {
-        try {
-            int val = Integer.parseInt(field.getText().toString().trim());
-            return Math.max(min, Math.min(max, val));
-        } catch (NumberFormatException e) {
-            return defaultVal;
+    // --- Positioning ---
+
+    private double[] getBeaconPosition(String compositeId, Beacon beacon) {
+        String uuid = beacon.getId1().toString();
+        int major = beacon.getIdentifiers().size() >= 2 ? beacon.getId2().toInt() : 0;
+        int minor = beacon.getIdentifiers().size() >= 3 ? beacon.getId3().toInt() : 0;
+
+        com.beaconiq.trilateration.model.Beacon calibrated =
+                calibrationStore.getBeacon(uuid, major, minor);
+        if (calibrated != null) {
+            return new double[]{calibrated.getX(), calibrated.getY()};
         }
+
+        double cx = 5.0, cy = 5.0, r = 3.5;
+        double angle = 2 * Math.PI * autoPositionCounter / 6.0;
+        autoPositionCounter++;
+        return new double[]{cx + r * Math.cos(angle), cy + r * Math.sin(angle)};
     }
 
-    private double readDouble(EditText field, double defaultVal, double min, double max) {
-        try {
-            double val = Double.parseDouble(field.getText().toString().trim());
-            return Math.max(min, Math.min(max, val));
-        } catch (NumberFormatException e) {
-            return defaultVal;
+    // --- BLE callbacks ---
+
+    @Override
+    public void onBeaconDiscovered(Beacon beacon, byte[] scanRecord) {
+        if (isCalibrationActive) {
+            onBeaconDuringCalibration(beacon);
+            return;
         }
-    }
+        if (!isRecording) return;
 
-    // --- Positioning model ---
+        totalScanResults++;
 
-    private void evaluateModel() {
+        if (beacon.getRssi() == 127) return;
+
+        String compositeId = buildCompositeId(beacon);
+        uniqueBeaconIds.add(compositeId);
+
+        if (beacon.getRssi() < rssiThreshold) {
+            rejectedCount++;
+            return;
+        }
+
+        ibeaconHits++;
+
+        double distance = Math.pow(10.0, (txPower - beacon.getRssi()) / (10.0 * pathLossN));
+        Double filteredRssi = processP2Beacon(beacon, compositeId);
+
         long now = System.currentTimeMillis();
+        int major = beacon.getIdentifiers().size() >= 2 ? beacon.getId2().toInt() : 0;
+        int minor = beacon.getIdentifiers().size() >= 3 ? beacon.getId3().toInt() : 0;
 
-        if (isPhaseTwo) {
-            p2BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
-            // Phase II: simple active-beacon count
-            int active = countActiveBeacons();
-            if (active < 3) {
-                modelState = "SEARCHING";
-                closestBeaconUid = null;
-                estimatedPosition = null;
-            } else {
-                evaluatePhaseTwo();
-            }
+        Map<String, Object> reading = new HashMap<>();
+        reading.put("timestamp_ms", now);
+        reading.put("beacon_id", compositeId);
+        reading.put("uuid", beacon.getId1().toString());
+        reading.put("major", major);
+        reading.put("minor", minor);
+        reading.put("rssi_raw", beacon.getRssi());
+        reading.put("rssi_filtered", filteredRssi != null ? Math.round(filteredRssi * 100.0) / 100.0 : "");
+        reading.put("distance_m", Math.round(distance * 100.0) / 100.0);
+        double[] pos = estimatedPosition;
+        reading.put("est_x", pos != null ? Math.round(pos[0] * 100.0) / 100.0 : "");
+        reading.put("est_y", pos != null ? Math.round(pos[1] * 100.0) / 100.0 : "");
+        reading.put("model_phase", "phase_2");
+        ibeaconReadings.add(reading);
+
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("timestamp_ms", now);
+        raw.put("device_address", beacon.getBluetoothAddress());
+        raw.put("company_id", String.format(Locale.US, "0x%04X", beacon.getManufacturer()));
+        raw.put("rssi", beacon.getRssi());
+        raw.put("was_ibeacon", true);
+        raw.put("data_hex", bytesToHex(scanRecord));
+        rawScans.add(raw);
+    }
+
+    @Override
+    public void onGenericDeviceDiscovered(BleDevice device) {
+        if (!isRecording) return;
+
+        totalScanResults++;
+        rejectedCount++;
+
+        Map<String, Object> raw = new HashMap<>();
+        raw.put("timestamp_ms", device.getLastSeenMs());
+        raw.put("device_address", device.getMacAddress());
+        raw.put("rssi", device.getRssi());
+        raw.put("was_ibeacon", false);
+        raw.put("data_hex", bytesToHex(device.getScanRecord()));
+        raw.put("reject_reason", "not_ibeacon");
+        rawScans.add(raw);
+    }
+
+    @Override
+    public void onScanFailed(int errorCode) {
+        Log.e(TAG, "Scan failed: " + errorCode);
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(() -> {
+                if (isRecording) {
+                    endSession();
+                }
+            });
+        }
+    }
+
+    // --- P2 model evaluation ---
+
+    private void runModelEvaluation() {
+        long now = System.currentTimeMillis();
+        p2BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
+
+        int active = countActiveP2Beacons();
+        if (active < MIN_BEACONS_REQUIRED) {
+            modelState = "SEARCHING";
+            closestBeaconUid = null;
+            estimatedPosition = null;
         } else {
-            p1BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
-            // Phase I: 1:1 original RadarScanActivity.positioningRunnable logic
-            int validBeaconCount = p1BeaconMap.size();
-            Log.d(TAG, "P1 Beacon count: " + validBeaconCount);
-
-            if (validBeaconCount >= MIN_BEACONS_REQUIRED
-                    && hasValidCoordinates(p1BeaconMap.values())
-                    && hasEnoughStableBeacons(p1BeaconMap.values())) {
-                evaluatePhaseOne();
-            } else if (validBeaconCount > 0) {
-                transitionTo(PositionState.POSITIONING);
-                estimatedPosition = null;
-            } else {
-                exitZone();
-                transitionTo(PositionState.SEARCHING);
-            }
+            evaluatePhaseTwo();
         }
 
         updateModelStatusPanel();
         updateCalibratedKeys();
         updateCalibrationStatusLine();
-        if (isPhaseTwo) {
-            positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), estimatedPosition, closestBeaconUid);
-            positioningCanvas.updatePhaseOneGhosts(null, null, null);
-        } else {
-            positioningCanvas.update(new HashMap<>(p1BeaconMap), estimatedPosition, closestBeaconUid);
-            positioningCanvas.updatePhaseOneGhosts(radarClosestBeacon, legacyNearestBeacon, serviceClosestBeacon);
-        }
+        positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), estimatedPosition, closestBeaconUid);
     }
 
-    private boolean hasValidCoordinates(java.util.Collection<BeaconSample> beacons) {
-        for (BeaconSample b : beacons) {
-            if (Double.isNaN(b.getX()) || Double.isNaN(b.getY())) {
-                return false;
+    private Double processP2Beacon(Beacon beacon, String compositeId) {
+        P2BeaconSample sample = getOrCreateP2Sample(beacon, compositeId);
+        return sample.getKalmanFilteredRssi();
+    }
+
+    private P2BeaconSample getOrCreateP2Sample(Beacon beacon, String compositeId) {
+        P2BeaconSample sample = p2BeaconMap.get(compositeId);
+        if (sample == null) {
+            double[] pos = getBeaconPosition(compositeId, beacon);
+            sample = new P2BeaconSample(
+                    compositeId, pos[0], pos[1],
+                    kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
+            com.beaconiq.trilateration.model.Beacon cal =
+                    calibrationStore.getBeacon(compositeId);
+            if (cal != null) {
+                sample.setTxPowerOverride(cal.getTxPower());
             }
+            p2BeaconMap.put(compositeId, sample);
         }
-        return true;
+        sample.addRssi(beacon.getRssi());
+        return sample;
     }
 
-    private boolean hasEnoughStableBeacons(java.util.Collection<BeaconSample> beacons) {
+    private int countActiveP2Beacons() {
         int count = 0;
-        for (BeaconSample b : beacons) {
-            if (b.getFilteredDistance() != null) count++;
+        for (P2BeaconSample b : p2BeaconMap.values()) {
+            if (b.getKalmanFilteredDistance(txPower, pathLossN, scaleFactor) != null) count++;
         }
-        return count >= MIN_BEACONS_REQUIRED;
-    }
-
-    private void evaluatePhaseOne() {
-        // =================================================================
-        // 1:1 reproduction of original TEDtour — three independent systems
-        // running simultaneously, each with its own selection logic.
-        // =================================================================
-
-        // --- SYSTEM A: RadarScanActivity.runModel() [DRIVES MODEL OUTPUT] ---
-        // BUG #1: getFilteredDistance() bypasses KalmanFilter1D (returns raw*5.0)
-        for (BeaconSample b : p1BeaconMap.values()) {
-            Log.d(TAG, "P1 MODEL INPUT -> uid=" + shortUid(b.getUid())
-                    + " x=" + b.getX() + " y=" + b.getY()
-                    + " dist=" + b.getFilteredDistance()
-                    + " rssiAvg=" + b.getAverageRssi());
-        }
-
-        // Original runModel() — COMMENTED OUT version used findBeaconInInfluence (centroid + radius)
-        // String closestUuid = TrilaterationJavaSolver.findBeaconInInfluence(p1BeaconMap.values());
-
-        // Original runModel() — ACTIVE version uses findClosestBeacon (min distance)
-        radarClosestBeacon = runModel(p1BeaconMap.values());
-        Log.d(TAG, "P1 runModel -> closest beacon: " + radarClosestBeacon);
-
-        if (radarClosestBeacon != null && !radarClosestBeacon.equals(lastNotifiedBeaconUuid)) {
-            enterZone(radarClosestBeacon);
-        }
-
-        transitionTo(PositionState.INSIDE_ZONE);
-
-        if (closestBeaconUid != null) {
-            BeaconSample bs = p1BeaconMap.get(closestBeaconUid);
-            if (bs != null) {
-                estimatedPosition = new double[]{bs.getX(), bs.getY()};
-            }
-        }
-
-        // --- SYSTEM B: ProximityEngine [BUG #2: instantiated, never evaluated] ---
-        // Original: influenceRadius = MIN_BEACONS_REQUIRED (3) instead of meters.
-        // evaluate() was never called in the active flow.
-        if (proximityEngine == null) {
-            proximityEngine = new ProximityEngine(p1BeaconMap, MIN_BEACONS_REQUIRED);
-            Log.d(TAG, "P1 ProximityEngine instantiated with influenceRadius="
-                    + MIN_BEACONS_REQUIRED + " (BUG: should be meters)");
-        }
-
-        // --- SYSTEM C: ScanActivity.findNearestBeacon() [BUG #3: inverted] ---
-        // Separate Activity — picks min RSSI (farthest beacon).
-        // beaconRSSIMap.clear() happened at start of didRangeBeaconsInRegion.
-        // Uses containsKey: only first RSSI per beacon per scan cycle.
-        legacyNearestBeacon = findNearestBeaconByRssi(legacyBeaconRSSIMap);
-        legacyBeaconRSSIMap.clear();
-        Log.d(TAG, "P1 ScanActivity -> nearestBeacon (min RSSI = farthest): "
-                + legacyNearestBeacon);
-
-        // Original ScanActivity change detection: beaconNotificationActivity when UUID changes
-        if (legacyNearestBeacon != null && !legacyNearestBeacon.equals(currentNearestBeacon)) {
-            currentNearestBeacon = legacyNearestBeacon;
-            Log.d(TAG, "P1 ScanActivity -> beaconNotificationActivity: "
-                    + shortUid(legacyNearestBeacon));
-        }
-
-        // --- SYSTEM D: BeaconScanService [strongest raw RSSI = correct logic] ---
-        // Foreground service with 1 iBeacon parser (vs 6 in RadarScanActivity).
-        // Selected beacon with highest raw RSSI from a single scan cycle.
-        // Broadcast ACTION_NEW_STAND on change → RadarScanActivity.onNewStandDetected()
-        serviceClosestBeacon = findStrongestBeaconByRawRssi();
-        if (serviceClosestBeacon != null
-                && !serviceClosestBeacon.equals(currentClosestUuid)) {
-            currentClosestUuid = serviceClosestBeacon;
-            Log.d(TAG, "P1 BeaconScanService -> ACTION_NEW_STAND: "
-                    + shortUid(serviceClosestBeacon));
-        }
-
-        // --- DIAGNOSTIC: log when systems disagree ---
-        if (radarClosestBeacon != null && legacyNearestBeacon != null
-                && !radarClosestBeacon.equals(legacyNearestBeacon)) {
-            Log.w(TAG, "DUAL-DETECTION: Radar=" + shortUid(radarClosestBeacon)
-                    + " ScanActivity=" + shortUid(legacyNearestBeacon)
-                    + " Service=" + (serviceClosestBeacon != null
-                    ? shortUid(serviceClosestBeacon) : "---"));
-        }
-
-        // Gap 8 (Firebase race): Original created BeaconSample at (0,0), then
-        // async-fetched real coords from Firebase. Model could run with (0,0)
-        // before Firebase responded. Not reproduced — coords come from
-        // CalibrationStore immediately.
-    }
-
-    // Original RadarScanActivity.runModel() — active version
-    private String runModel(java.util.Collection<BeaconSample> beacons) {
-        if (beacons.size() < MIN_BEACONS_REQUIRED) return null;
-        return TrilaterationJavaSolver.findClosestBeacon(beacons);
-    }
-
-    // Original RadarScanActivity.enterZone()
-    private void enterZone(String uuid) {
-        if (uuid == null) return;
-        if (uuid.equals(lastNotifiedBeaconUuid)) return;
-
-        lastNotifiedBeaconUuid = uuid;
-        activeStandUuid = uuid;
-        closestBeaconUid = uuid;
-
-        // Original: broadcast ACTION_CLOSEST_BEACON_CHANGED + open BeaconDetailActivityComplete
-        Log.d(TAG, "P1 enterZone: ACTION_CLOSEST_BEACON_CHANGED uuid=" + shortUid(uuid));
-        if (!isDetailActivityOpen) {
-            Log.d(TAG, "P1 enterZone: would open BeaconDetailActivityComplete for " + shortUid(uuid));
-            isDetailActivityOpen = true;
-        }
-    }
-
-    // Original RadarScanActivity.exitZone()
-    private void exitZone() {
-        if (activeStandUuid != null) {
-            activeStandUuid = null;
-            lastNotifiedBeaconUuid = null;
-        }
-        closestBeaconUid = null;
-        estimatedPosition = null;
-    }
-
-    // Original RadarScanActivity.transitionTo() — only acts when state changes
-    private void transitionTo(PositionState state) {
-        if (currentPositionState == state) return;
-        currentPositionState = state;
-        modelState = state.name();
-        Log.d(TAG, "P1 transitionTo: " + state.name());
-    }
-
-    // Original ScanActivity.findNearestBeacon() — 1:1 reproduction
-    // BUG: picks MINIMUM RSSI (most negative = farthest beacon)
-    private static String findNearestBeaconByRssi(Map<String, Integer> beaconRSSIMap) {
-        String nearestBeacon = null;
-        int minRSSI = Integer.MAX_VALUE;
-        for (Map.Entry<String, Integer> entry : beaconRSSIMap.entrySet()) {
-            if (entry.getValue() < minRSSI) {
-                minRSSI = entry.getValue();
-                nearestBeacon = entry.getKey();
-            }
-        }
-        return nearestBeacon;
-    }
-
-    // Original BeaconScanService — selects beacon with strongest raw RSSI
-    // Original used raw RSSI from single scan cycle, not averaged.
-    // Only had 1 iBeacon parser (we use same pool — noted as limitation).
-    private String findStrongestBeaconByRawRssi() {
-        String strongest = null;
-        int maxRssi = Integer.MIN_VALUE;
-        for (Map.Entry<String, Integer> entry : legacyBeaconRSSIMap.entrySet()) {
-            int rssi = entry.getValue();
-            if (rssi > maxRssi) {
-                maxRssi = rssi;
-                strongest = entry.getKey();
-            }
-        }
-        return strongest;
+        return count;
     }
 
     private void evaluatePhaseTwo() {
@@ -1057,52 +999,12 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         return closest;
     }
 
-    private int countActiveBeacons() {
-        int count = 0;
-        if (isPhaseTwo) {
-            for (P2BeaconSample b : p2BeaconMap.values()) {
-                if (b.getKalmanFilteredDistance(txPower, pathLossN, scaleFactor) != null) count++;
-            }
-        } else {
-            for (BeaconSample b : p1BeaconMap.values()) {
-                if (b.getFilteredDistance() != null) count++;
-            }
-        }
-        return count;
-    }
-
-    // --- Calibration mode ---
-
-    private final Runnable calibrationEvalRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!isCalibrating) return;
-            long now = System.currentTimeMillis();
-            p2BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
-
-            double[] position = null;
-            String closestKey = null;
-            int solIdx = spinnerSolver.getSelectedItemPosition();
-            if (solIdx == 1) {
-                position = estimatePositionWCL();
-            } else {
-                position = P2TrilaterationJavaSolver.estimatePosition(p2BeaconMap.values());
-            }
-            if (position != null) {
-                closestKey = findClosestToPosition(position);
-            }
-
-            updateCalibratedKeys();
-            updateCalibrationStatusLine();
-            positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), position, closestKey);
-            modelHandler.postDelayed(this, modelEvalIntervalMs);
-        }
-    };
+    // --- Calibration ---
 
     private void toggleCalibrationMode() {
         if (isRecording) return;
 
-        if (isCalibrating) {
+        if (isCalibrationActive) {
             stopCalibrationMode();
         } else {
             startCalibrationMode();
@@ -1110,18 +1012,17 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     }
 
     private void startCalibrationMode() {
-        isCalibrating = true;
-        if (isPhaseTwo) {
-            txPower = readInt(editTxPower, -59, -100, 0);
-            pathLossN = readDouble(editPathLoss, 2.0, 1.0, 6.0);
-            kalmanQ = readDouble(editKalmanQ, DEFAULT_KALMAN_Q, 0.001, 1.0);
-            kalmanR = readDouble(editKalmanR, DEFAULT_KALMAN_R, 0.001, 5.0);
-            rssiBufferSize = readInt(editRssiBuffer, DEFAULT_RSSI_BUFFER_SIZE, 1, 100);
-            rssiTimeWindowMs = readInt(editRssiWindow, (int) DEFAULT_RSSI_TIME_WINDOW_MS, 500, 30000);
-            scaleFactor = readDouble(editScaleFactor, DEFAULT_SCALE_FACTOR, 0.1, 50.0);
-            beaconTimeoutMs = readInt(editBeaconTimeout, (int) DEFAULT_BEACON_TIMEOUT_MS, 1000, 30000);
-            modelEvalIntervalMs = readInt(editEvalInterval, (int) DEFAULT_MODEL_EVAL_INTERVAL_MS, 500, 30000);
-        }
+        isCalibrationActive = true;
+
+        txPower = readInt(editTxPower, -59, -100, 0);
+        pathLossN = readDouble(editPathLoss, 2.0, 1.0, 6.0);
+        kalmanQ = readDouble(editKalmanQ, DEFAULT_KALMAN_Q, 0.001, 1.0);
+        kalmanR = readDouble(editKalmanR, DEFAULT_KALMAN_R, 0.001, 5.0);
+        rssiBufferSize = readInt(editRssiBuffer, DEFAULT_RSSI_BUFFER_SIZE, 1, 100);
+        rssiTimeWindowMs = readInt(editRssiWindow, (int) DEFAULT_RSSI_TIME_WINDOW_MS, 500, 30000);
+        scaleFactor = readDouble(editScaleFactor, DEFAULT_SCALE_FACTOR, 0.1, 50.0);
+        beaconTimeoutMs = readInt(editBeaconTimeout, (int) DEFAULT_BEACON_TIMEOUT_MS, 1000, 30000);
+        modelEvalIntervalMs = readInt(editEvalInterval, (int) DEFAULT_MODEL_EVAL_INTERVAL_MS, 500, 30000);
 
         p2BeaconMap.clear();
         autoPositionCounter = 0;
@@ -1156,7 +1057,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     }
 
     private void stopCalibrationMode() {
-        isCalibrating = false;
+        isCalibrationActive = false;
         modelHandler.removeCallbacks(calibrationEvalRunnable);
         bleScanner.stopScan();
 
@@ -1181,24 +1082,8 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     private void onBeaconDuringCalibration(Beacon beacon) {
         if (beacon.getRssi() == 127) return;
 
-        String compositeId = beacon.getId1().toString();
-        if (beacon.getIdentifiers().size() >= 2) compositeId += ":" + beacon.getId2();
-        if (beacon.getIdentifiers().size() >= 3) compositeId += ":" + beacon.getId3();
-
-        P2BeaconSample sample = p2BeaconMap.get(compositeId);
-        if (sample == null) {
-            double[] pos = getBeaconPosition(compositeId, beacon);
-            sample = new P2BeaconSample(
-                    compositeId, pos[0], pos[1],
-                    kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
-            com.beaconiq.trilateration.model.Beacon cal =
-                    calibrationStore.getBeacon(compositeId);
-            if (cal != null) {
-                sample.setTxPowerOverride(cal.getTxPower());
-            }
-            p2BeaconMap.put(compositeId, sample);
-        }
-        sample.addRssi(beacon.getRssi());
+        String compositeId = buildCompositeId(beacon);
+        getOrCreateP2Sample(beacon, compositeId);
     }
 
     private void updateCalibratedKeys() {
@@ -1396,33 +1281,13 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         builder.show();
     }
 
-    private void updateModelStatusPanel() {
-        int active = countActiveBeacons();
-        String uid = closestBeaconUid != null ? shortUid(closestBeaconUid) : "---";
+    // --- Utilities ---
 
-        tvClosest.setText("Closest: " + uid);
-        tvState.setText("State: " + modelState);
-        tvBeaconCount.setText("Beacons: " + active + " / 3 required");
-
-        if (isPhaseTwo) {
-            tvKalmanStatus.setText("Kalman: ON (q=" + kalmanQ + ", r=" + kalmanR + ")");
-            String solver = spinnerSolver.getSelectedItemPosition() == 1
-                    ? "WCL" : "Centroid";
-            tvSolverStatus.setText("Solver: " + solver);
-            tvEngineStatus.setText("ProximityEngine: not used (direct solver)");
-        } else {
-            String radarUid = radarClosestBeacon != null ? shortUid(radarClosestBeacon) : "---";
-            String scanUid = legacyNearestBeacon != null ? shortUid(legacyNearestBeacon) : "---";
-            String svcUid = serviceClosestBeacon != null ? shortUid(serviceClosestBeacon) : "---";
-
-            tvKalmanStatus.setText("Radar(noKalman): " + radarUid
-                    + " | Solver: findClosestBeacon");
-            tvSolverStatus.setText("Scan(minRSSI): " + scanUid
-                    + " | Svc(rawRSSI): " + svcUid);
-            tvEngineStatus.setText("Engine(r=" + MIN_BEACONS_REQUIRED
-                    + "): instantiated, not called"
-                    + " | findBeaconInInfluence: commented");
-        }
+    private static String buildCompositeId(Beacon beacon) {
+        String id = beacon.getId1().toString();
+        if (beacon.getIdentifiers().size() >= 2) id += ":" + beacon.getId2();
+        if (beacon.getIdentifiers().size() >= 3) id += ":" + beacon.getId3();
+        return id;
     }
 
     private static String shortUid(String compositeId) {
@@ -1433,196 +1298,6 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
             return uuid + ":" + parts[1] + ":" + parts[2];
         }
         return compositeId;
-    }
-
-    private double[] getBeaconPosition(String compositeId, Beacon beacon) {
-        String uuid = beacon.getId1().toString();
-        int major = beacon.getIdentifiers().size() >= 2 ? beacon.getId2().toInt() : 0;
-        int minor = beacon.getIdentifiers().size() >= 3 ? beacon.getId3().toInt() : 0;
-
-        com.beaconiq.trilateration.model.Beacon calibrated =
-                calibrationStore.getBeacon(uuid, major, minor);
-        if (calibrated != null) {
-            return new double[]{calibrated.getX(), calibrated.getY()};
-        }
-
-        double cx = 5.0, cy = 5.0, r = 3.5;
-        double angle = 2 * Math.PI * autoPositionCounter / 6.0;
-        autoPositionCounter++;
-        return new double[]{cx + r * Math.cos(angle), cy + r * Math.sin(angle)};
-    }
-
-    // --- BleScanner.ScanListener ---
-
-    @Override
-    public void onBeaconDiscovered(Beacon beacon, byte[] scanRecord) {
-        if (isCalibrating) {
-            onBeaconDuringCalibration(beacon);
-            return;
-        }
-        if (!isRecording) return;
-
-        totalScanResults++;
-
-        if (isPhaseTwo && beacon.getRssi() == 127) return;
-
-        String compositeId = beacon.getId1().toString();
-        if (beacon.getIdentifiers().size() >= 2) compositeId += ":" + beacon.getId2();
-        if (beacon.getIdentifiers().size() >= 3) compositeId += ":" + beacon.getId3();
-        uniqueBeaconIds.add(compositeId);
-
-        if (beacon.getRssi() < rssiThreshold) {
-            rejectedCount++;
-            return;
-        }
-
-        ibeaconHits++;
-
-        double distance = Math.pow(10.0, (txPower - beacon.getRssi()) / (10.0 * pathLossN));
-        Double filteredRssi;
-
-        if (isPhaseTwo) {
-            P2BeaconSample sample = p2BeaconMap.get(compositeId);
-            if (sample == null) {
-                double[] pos = getBeaconPosition(compositeId, beacon);
-                sample = new P2BeaconSample(
-                        compositeId, pos[0], pos[1],
-                        kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
-                com.beaconiq.trilateration.model.Beacon cal =
-                        calibrationStore.getBeacon(compositeId);
-                if (cal != null) {
-                    sample.setTxPowerOverride(cal.getTxPower());
-                }
-                p2BeaconMap.put(compositeId, sample);
-            }
-            sample.addRssi(beacon.getRssi());
-            filteredRssi = sample.getKalmanFilteredRssi();
-        } else {
-            BeaconSample sample = p1BeaconMap.get(compositeId);
-            if (sample == null) {
-                double[] pos = getBeaconPosition(compositeId, beacon);
-                sample = new BeaconSample(compositeId, pos[0], pos[1]);
-                p1BeaconMap.put(compositeId, sample);
-            }
-            sample.addRssi(beacon.getRssi());
-            filteredRssi = sample.getAverageRssi();
-
-            // Phase I legacy: feed raw RSSI into ScanActivity's map (original only stored first seen)
-            if (!legacyBeaconRSSIMap.containsKey(compositeId)) {
-                legacyBeaconRSSIMap.put(compositeId, beacon.getRssi());
-            }
-        }
-
-        long now = System.currentTimeMillis();
-        int major = beacon.getIdentifiers().size() >= 2 ? beacon.getId2().toInt() : 0;
-        int minor = beacon.getIdentifiers().size() >= 3 ? beacon.getId3().toInt() : 0;
-
-        Map<String, Object> reading = new HashMap<>();
-        reading.put("timestamp_ms", now);
-        reading.put("beacon_id", compositeId);
-        reading.put("uuid", beacon.getId1().toString());
-        reading.put("major", major);
-        reading.put("minor", minor);
-        reading.put("rssi_raw", beacon.getRssi());
-        reading.put("rssi_filtered", filteredRssi != null ? Math.round(filteredRssi * 100.0) / 100.0 : "");
-        reading.put("distance_m", Math.round(distance * 100.0) / 100.0);
-        double[] pos = estimatedPosition;
-        reading.put("est_x", pos != null ? Math.round(pos[0] * 100.0) / 100.0 : "");
-        reading.put("est_y", pos != null ? Math.round(pos[1] * 100.0) / 100.0 : "");
-        reading.put("model_phase", isPhaseTwo ? "phase_2" : "phase_1");
-        if (!isPhaseTwo) {
-            BeaconSample p1sample = p1BeaconMap.get(compositeId);
-            Double unfilteredDist = p1sample != null ? p1sample.getFilteredDistance() : null;
-            reading.put("dist_no_kalman", unfilteredDist != null
-                    ? Math.round(unfilteredDist * 100.0) / 100.0 : "");
-            reading.put("radar_closest", radarClosestBeacon != null ? radarClosestBeacon : "");
-            reading.put("scan_nearest_rssi", legacyNearestBeacon != null ? legacyNearestBeacon : "");
-            reading.put("service_closest", serviceClosestBeacon != null ? serviceClosestBeacon : "");
-            reading.put("dual_conflict",
-                    radarClosestBeacon != null && legacyNearestBeacon != null
-                    && !radarClosestBeacon.equals(legacyNearestBeacon) ? "YES" : "NO");
-        }
-        ibeaconReadings.add(reading);
-
-        Map<String, Object> raw = new HashMap<>();
-        raw.put("timestamp_ms", now);
-        raw.put("device_address", beacon.getBluetoothAddress());
-        raw.put("company_id", String.format(Locale.US, "0x%04X", beacon.getManufacturer()));
-        raw.put("rssi", beacon.getRssi());
-        raw.put("was_ibeacon", true);
-        raw.put("data_hex", bytesToHex(scanRecord));
-        rawScans.add(raw);
-    }
-
-    @Override
-    public void onGenericDeviceDiscovered(BleDevice device) {
-        if (!isRecording) return;
-
-        totalScanResults++;
-        rejectedCount++;
-
-        Map<String, Object> raw = new HashMap<>();
-        raw.put("timestamp_ms", device.getLastSeenMs());
-        raw.put("device_address", device.getMacAddress());
-        raw.put("rssi", device.getRssi());
-        raw.put("was_ibeacon", false);
-        raw.put("data_hex", bytesToHex(device.getScanRecord()));
-        raw.put("reject_reason", "not_ibeacon");
-        rawScans.add(raw);
-    }
-
-    @Override
-    public void onScanFailed(int errorCode) {
-        Log.e(TAG, "Scan failed: " + errorCode);
-        if (getActivity() != null) {
-            getActivity().runOnUiThread(() -> {
-                if (isRecording) {
-                    endSession();
-                }
-            });
-        }
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        // Original RadarScanActivity.onResume() reset all state on every resume
-        if (!isPhaseTwo && isRecording) {
-            lastNotifiedBeaconUuid = null;
-            activeStandUuid = null;
-            isDetailActivityOpen = false;
-            closestBeaconUid = null;
-            currentPositionState = PositionState.SEARCHING;
-            modelState = "SEARCHING";
-            estimatedPosition = null;
-            Log.d(TAG, "P1 onResume: state reset (original behavior)");
-        }
-    }
-
-    @Override
-    public void onPause() {
-        super.onPause();
-        if (isCalibrating) {
-            stopCalibrationMode();
-        }
-        if (isRecording) {
-            endSession();
-        }
-    }
-
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        timerHandler.removeCallbacks(timerRunnable);
-        modelHandler.removeCallbacks(modelEvalRunnable);
-        modelHandler.removeCallbacks(calibrationEvalRunnable);
-        if (orientationSensor != null) {
-            orientationSensor.stop();
-        }
-        if (bleScanner != null && bleScanner.isScanning()) {
-            bleScanner.stopScan();
-        }
-        executor.shutdown();
     }
 
     private static String bytesToHex(byte[] bytes) {

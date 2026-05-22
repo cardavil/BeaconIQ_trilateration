@@ -159,24 +159,24 @@
                     android:padding="10dp"
                     android:popupBackground="@color/bg" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="20dp"
-                    android:layout_marginBottom="4dp"
-                    android:letterSpacing="0.08"
-                    android:text="MODEL PARAMETERS"
-                    android:textAllCaps="true"
-                    android:textColor="@color/teal"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <!-- Model parameters (visible in all phases, editable in Phase II) -->
+                <!-- Model parameters + solver + reset (Phase II only) -->
                 <LinearLayout
                     android:id="@+id/model_params_section"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="20dp"
+                        android:layout_marginBottom="4dp"
+                        android:letterSpacing="0.08"
+                        android:text="MODEL PARAMETERS"
+                        android:textAllCaps="true"
+                        android:textColor="@color/teal"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -407,76 +407,41 @@
                         android:textColor="@color/text_primary"
                         android:textColorHint="@color/text_dim"
                         android:textSize="14sp" />
-                </LinearLayout>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="Kalman Q — Process Noise (0.001 to 1.0)"
-                    android:textColor="@color/text_primary"
-                    android:textSize="14sp" />
-
-                <EditText
-                    android:id="@+id/edit_kalman_q"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:background="@drawable/edit_border"
-                    android:fontFamily="monospace"
-                    android:hint="0.05"
-                    android:importantForAutofill="no"
-                    android:inputType="numberDecimal"
-                    android:padding="10dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_dim"
-                    android:textSize="14sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="Kalman R — Measurement Noise (0.01 to 5.0)"
-                    android:textColor="@color/text_primary"
-                    android:textSize="14sp" />
-
-                <EditText
-                    android:id="@+id/edit_kalman_r"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:background="@drawable/edit_border"
-                    android:fontFamily="monospace"
-                    android:hint="0.25"
-                    android:importantForAutofill="no"
-                    android:inputType="numberDecimal"
-                    android:padding="10dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_dim"
-                    android:textSize="14sp" />
-
-                <LinearLayout
-                    android:id="@+id/solver_section"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="Solver"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <Spinner
-                        android:id="@+id/spinner_solver"
+                    <LinearLayout
+                        android:id="@+id/solver_section"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/spinner_border"
-                        android:padding="10dp"
-                        android:popupBackground="@color/bg" />
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:text="Solver"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp" />
+
+                        <Spinner
+                            android:id="@+id/spinner_solver"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:background="@drawable/spinner_border"
+                            android:padding="10dp"
+                            android:popupBackground="@color/bg" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/btn_reset_defaults"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:background="@drawable/btn_grey"
+                        android:text="Reset Defaults"
+                        android:textColor="@color/text_muted"
+                        android:textSize="13sp"
+                        app:backgroundTint="@null" />
                 </LinearLayout>
 
                 <TextView
@@ -503,17 +468,6 @@
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/text_dim"
                     android:textSize="14sp" />
-
-                <Button
-                    android:id="@+id/btn_reset_defaults"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:background="@drawable/btn_grey"
-                    android:text="Reset Defaults"
-                    android:textColor="@color/text_muted"
-                    android:textSize="13sp"
-                    app:backgroundTint="@null" />
             </LinearLayout>
 
             <!-- Model status panel (visible during recording) -->

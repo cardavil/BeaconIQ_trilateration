@@ -1,7 +1,21 @@
+# Build artifacts
+.gradle/
+build/
+app/build/
+positioning-core/build/
+
+# IDE
+.idea/
+
+# Local config
+local.properties
+
+# Claude Code
 .claude/
+
+# Backend credentials
+backend/apps-script/.clasp.json
+
 # OS files
 .DS_Store
 Thumbs.db
-backend/apps-script/.clasp.json
-.gradle/
-positioning-core/build/
