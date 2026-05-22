@@ -42,6 +42,8 @@ public class P2BeaconSample {
         this.lastSeen = System.currentTimeMillis();
     }
 
+    private double txPowerOverride = Double.NaN;
+
     private int lastRawRssi;
 
     public void addRssi(double rssi) {
@@ -104,6 +106,16 @@ public class P2BeaconSample {
     public double getX() { return x; }
     public double getY() { return y; }
     public void setCoordinates(double x, double y) { this.x = x; this.y = y; }
+    public void setTxPowerOverride(double txPower) { this.txPowerOverride = txPower; }
+    public boolean hasTxPowerOverride() { return !Double.isNaN(txPowerOverride); }
+    public double getTxPowerOverride() { return txPowerOverride; }
+
+    public void copyRssiFrom(P2BeaconSample other) {
+        rssiBuffer.clear();
+        rssiBuffer.addAll(other.rssiBuffer);
+        lastRawRssi = other.lastRawRssi;
+        lastSeen = other.lastSeen;
+    }
 
     public Double getKalmanFilteredRssi() {
         Double avgRssi = getAverageRssi();
@@ -114,7 +126,8 @@ public class P2BeaconSample {
     public Double getKalmanFilteredDistance(double txPwr, double n, double scale) {
         Double avgRssi = getAverageRssi();
         if (avgRssi == null) return null;
-        double rawDistance = Math.pow(10.0, (txPwr - avgRssi) / (10.0 * n));
+        double effectiveTxPwr = hasTxPowerOverride() ? txPowerOverride : txPwr;
+        double rawDistance = Math.pow(10.0, (effectiveTxPwr - avgRssi) / (10.0 * n));
         double scaledDistance = rawDistance * scale;
         return distanceFilter.update(scaledDistance);
     }

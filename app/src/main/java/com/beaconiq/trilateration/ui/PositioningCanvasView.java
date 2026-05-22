@@ -7,6 +7,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
 import android.view.View;
 
 import com.beaconiq.trilateration.positioning.phase1.BeaconSample;
@@ -23,6 +24,10 @@ import java.util.Set;
 
 public class PositioningCanvasView extends View {
 
+    public interface OnBeaconTapListener {
+        void onBeaconTapped(String compositeId, double currentX, double currentY);
+    }
+
     private static final int MAX_TRAIL_SIZE = 10;
     private static final float BEACON_RADIUS = 18f;
     private static final float CLOSEST_BEACON_RADIUS = 24f;
@@ -31,6 +36,7 @@ public class PositioningCanvasView extends View {
     private static final float RING_RADIUS = 28f;
     private static final float GHOST_RING_RADIUS = 22f;
     private static final float GHOST_STROKE_WIDTH = 3f;
+    private static final float TAP_TOLERANCE = 8f;
     private static final float PAD = 48f;
 
     private Map<String, BeaconPos> beaconMap = new HashMap<>();
@@ -46,6 +52,11 @@ public class PositioningCanvasView extends View {
 
     private Set<String> cachedBeaconKeys;
     private double cachedMinX, cachedMaxX, cachedMinY, cachedMaxY;
+
+    private double lastScale, lastOffX, lastOffY;
+    private boolean drawParamsReady;
+    private Set<String> calibratedKeys = Collections.emptySet();
+    private OnBeaconTapListener beaconTapListener;
 
     private final Paint beaconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint closestBeaconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -68,6 +79,7 @@ public class PositioningCanvasView extends View {
     private final Paint ghostCPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ghostDPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ghostLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint calibratedBeaconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public PositioningCanvasView(Context context) {
         super(context);
@@ -161,6 +173,9 @@ public class PositioningCanvasView extends View {
         ghostLabelPaint.setColor(0xFF424242);
         ghostLabelPaint.setTextSize(18f);
         ghostLabelPaint.setTextAlign(Paint.Align.CENTER);
+
+        calibratedBeaconPaint.setColor(0xFF4CAF50);
+        calibratedBeaconPaint.setStyle(Paint.Style.FILL);
     }
 
     // Phase I entry point
@@ -233,10 +248,42 @@ public class PositioningCanvasView extends View {
         closestBeaconKey = null;
         positionTrail.clear();
         cachedBeaconKeys = null;
+        drawParamsReady = false;
         ghostA = null;
         ghostC = null;
         ghostD = null;
         invalidate();
+    }
+
+    public void setOnBeaconTapListener(OnBeaconTapListener listener) {
+        this.beaconTapListener = listener;
+    }
+
+    public void setCalibratedKeys(Set<String> keys) {
+        this.calibratedKeys = keys != null ? keys : Collections.<String>emptySet();
+        invalidate();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event.getAction() != MotionEvent.ACTION_UP) return true;
+        if (beaconTapListener == null || !drawParamsReady || beaconMap.isEmpty()) {
+            return super.onTouchEvent(event);
+        }
+        float tapX = event.getX();
+        float tapY = event.getY();
+        for (Map.Entry<String, BeaconPos> entry : beaconMap.entrySet()) {
+            BeaconPos b = entry.getValue();
+            float bx = toScreenX(b.x, lastScale, lastOffX);
+            float by = toScreenY(b.y, lastScale, lastOffY);
+            float dx = tapX - bx;
+            float dy = tapY - by;
+            if (dx * dx + dy * dy <= (BEACON_RADIUS + TAP_TOLERANCE) * (BEACON_RADIUS + TAP_TOLERANCE)) {
+                beaconTapListener.onBeaconTapped(entry.getKey(), b.x, b.y);
+                return true;
+            }
+        }
+        return super.onTouchEvent(event);
     }
 
     private void recalculateBounds() {
@@ -307,6 +354,11 @@ public class PositioningCanvasView extends View {
         double offX = PAD + (drawW - (cachedMaxX - cachedMinX) * scale) / 2;
         double offY = PAD + (drawH - (cachedMaxY - cachedMinY) * scale) / 2;
 
+        lastScale = scale;
+        lastOffX = offX;
+        lastOffY = offY;
+        drawParamsReady = true;
+
         drawBeacons(canvas, scale, offX, offY);
         drawGhostDots(canvas, scale, offX, offY);
         drawTrail(canvas, scale, offX, offY);
@@ -332,12 +384,14 @@ public class PositioningCanvasView extends View {
             float cy = toScreenY(b.y, scale, offY);
 
             boolean isClosest = entry.getKey().equals(closestBeaconKey);
+            boolean isCalibrated = calibratedKeys.contains(entry.getKey());
 
             if (isClosest) {
                 canvas.drawCircle(cx, cy, GLOW_RADIUS, glowPaint);
                 canvas.drawCircle(cx, cy, CLOSEST_BEACON_RADIUS, closestBeaconPaint);
             } else {
-                canvas.drawCircle(cx, cy, BEACON_RADIUS, beaconPaint);
+                canvas.drawCircle(cx, cy, BEACON_RADIUS,
+                        isCalibrated ? calibratedBeaconPaint : beaconPaint);
             }
 
             String label = entry.getKey();

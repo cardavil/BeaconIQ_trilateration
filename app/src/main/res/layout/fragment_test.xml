@@ -571,7 +571,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:fontFamily="monospace"
-                    android:text="Solver: findClosestBeacon (no x,y calculated)"
+                    android:text="Solver: ---"
                     android:textColor="@color/text_dim"
                     android:textSize="13sp" />
 
@@ -581,7 +581,17 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:fontFamily="monospace"
-                    android:text="ProximityEngine: instantiated, never called"
+                    android:text="Engine: ---"
+                    android:textColor="@color/text_dim"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tv_calibration_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="Calibrated: 0/0"
                     android:textColor="@color/text_dim"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -592,6 +602,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="200dp"
                 android:layout_marginTop="12dp" />
+
+            <Button
+                android:id="@+id/btn_calibrate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/btn_grey"
+                android:text="Calibration Mode"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                app:backgroundTint="@null" />
 
             <!-- Start/Stop button (outside form_section, stays visible during recording) -->
             <Button

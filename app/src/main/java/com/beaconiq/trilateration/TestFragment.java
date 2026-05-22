@@ -1,6 +1,7 @@
 package com.beaconiq.trilateration;
 
 import android.annotation.SuppressLint;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -11,6 +12,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -20,8 +22,10 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -184,6 +188,10 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
     private OrientationSensor orientationSensor;
 
+    private boolean isCalibrating;
+    private Button btnCalibrate;
+    private TextView tvCalibrationStatus;
+
     private final Handler modelHandler = new Handler(Looper.getMainLooper());
     private final Runnable modelEvalRunnable = new Runnable() {
         @Override
@@ -226,6 +234,14 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
         btnStartSession.setEnabled(
                 editAnalyst.getText().toString().trim().length() > 0);
+
+        positioningCanvas.setOnBeaconTapListener((compositeId, currentX, currentY) -> {
+            if (isCalibrating) {
+                showCalibrationDialog(compositeId, currentX, currentY);
+            }
+        });
+
+        btnCalibrate.setOnClickListener(v -> toggleCalibrationMode());
     }
 
     private void initViews(View view) {
@@ -270,7 +286,9 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         tvKalmanStatus = view.findViewById(R.id.tv_kalman_status);
         tvSolverStatus = view.findViewById(R.id.tv_solver_status);
         tvEngineStatus = view.findViewById(R.id.tv_engine_status);
+        tvCalibrationStatus = view.findViewById(R.id.tv_calibration_status);
         positioningCanvas = view.findViewById(R.id.positioning_canvas);
+        btnCalibrate = view.findViewById(R.id.btn_calibrate);
     }
 
     private void loadPreferences() {
@@ -396,8 +414,18 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
             adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
             spinnerSolver.setAdapter(adapter);
             spinnerSolver.setSelection(savedSolverIndex);
+
+            tvKalmanStatus.setText("Kalman: ON (q=" + kalmanQ + ", r=" + kalmanR + ")");
+            tvSolverStatus.setText("Solver: " + (savedSolverIndex == 1 ? "WCL" : "Centroid"));
+            tvEngineStatus.setText("ProximityEngine: not used (direct solver)");
+            tvCalibrationStatus.setText("Calibrated: 0/0");
         } else {
             solverSection.setVisibility(View.GONE);
+
+            tvKalmanStatus.setText("Kalman: OFF (bypassed in BeaconSample)");
+            tvSolverStatus.setText("Solver: findClosestBeacon (no x,y calculated)");
+            tvEngineStatus.setText("ProximityEngine: instantiated, never called");
+            tvCalibrationStatus.setVisibility(View.GONE);
         }
     }
 
@@ -497,6 +525,9 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
     @SuppressLint("MissingPermission")
     private void startSession() {
+        if (isCalibrating) {
+            stopCalibrationMode();
+        }
         String analyst = editAnalyst.getText().toString().trim();
         if (analyst.isEmpty()) return;
 
@@ -557,6 +588,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         estimatedPosition = null;
 
         formSection.setVisibility(View.GONE);
+        btnCalibrate.setVisibility(View.GONE);
         positioningCanvas.clear();
 
         updateModelStatusPanel();
@@ -688,6 +720,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
     private void resetForm() {
         formSection.setVisibility(View.VISIBLE);
+        btnCalibrate.setVisibility(View.VISIBLE);
         positioningCanvas.clear();
 
         btnStartSession.setText("Start Session");
@@ -790,6 +823,8 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         }
 
         updateModelStatusPanel();
+        updateCalibratedKeys();
+        updateCalibrationStatusLine();
         if (isPhaseTwo) {
             positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), estimatedPosition, closestBeaconUid);
             positioningCanvas.updatePhaseOneGhosts(null, null, null);
@@ -1036,6 +1071,331 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         return count;
     }
 
+    // --- Calibration mode ---
+
+    private final Runnable calibrationEvalRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isCalibrating) return;
+            long now = System.currentTimeMillis();
+            p2BeaconMap.entrySet().removeIf(e -> now - e.getValue().lastSeen > beaconTimeoutMs);
+
+            double[] position = null;
+            String closestKey = null;
+            int solIdx = spinnerSolver.getSelectedItemPosition();
+            if (solIdx == 1) {
+                position = estimatePositionWCL();
+            } else {
+                position = P2TrilaterationJavaSolver.estimatePosition(p2BeaconMap.values());
+            }
+            if (position != null) {
+                closestKey = findClosestToPosition(position);
+            }
+
+            updateCalibratedKeys();
+            updateCalibrationStatusLine();
+            positioningCanvas.updateP2(new HashMap<>(p2BeaconMap), position, closestKey);
+            modelHandler.postDelayed(this, modelEvalIntervalMs);
+        }
+    };
+
+    private void toggleCalibrationMode() {
+        if (isRecording) return;
+
+        if (isCalibrating) {
+            stopCalibrationMode();
+        } else {
+            startCalibrationMode();
+        }
+    }
+
+    private void startCalibrationMode() {
+        isCalibrating = true;
+        if (isPhaseTwo) {
+            txPower = readInt(editTxPower, -59, -100, 0);
+            pathLossN = readDouble(editPathLoss, 2.0, 1.0, 6.0);
+            kalmanQ = readDouble(editKalmanQ, DEFAULT_KALMAN_Q, 0.001, 1.0);
+            kalmanR = readDouble(editKalmanR, DEFAULT_KALMAN_R, 0.001, 5.0);
+            rssiBufferSize = readInt(editRssiBuffer, DEFAULT_RSSI_BUFFER_SIZE, 1, 100);
+            rssiTimeWindowMs = readInt(editRssiWindow, (int) DEFAULT_RSSI_TIME_WINDOW_MS, 500, 30000);
+            scaleFactor = readDouble(editScaleFactor, DEFAULT_SCALE_FACTOR, 0.1, 50.0);
+            beaconTimeoutMs = readInt(editBeaconTimeout, (int) DEFAULT_BEACON_TIMEOUT_MS, 1000, 30000);
+            modelEvalIntervalMs = readInt(editEvalInterval, (int) DEFAULT_MODEL_EVAL_INTERVAL_MS, 500, 30000);
+        }
+
+        p2BeaconMap.clear();
+        autoPositionCounter = 0;
+        positioningCanvas.clear();
+
+        formSection.setVisibility(View.GONE);
+        modelStatusPanel.setVisibility(View.VISIBLE);
+        positioningCanvas.setVisibility(View.VISIBLE);
+
+        tvClosest.setText("Closest: ---");
+        tvState.setText("State: CALIBRATING");
+        tvBeaconCount.setText("Beacons: 0 / 3 required");
+        tvKalmanStatus.setText("Kalman: ON (q=" + kalmanQ + ", r=" + kalmanR + ")");
+        String solver = spinnerSolver.getSelectedItemPosition() == 1 ? "WCL" : "Centroid";
+        tvSolverStatus.setText("Solver: " + solver);
+        tvEngineStatus.setText("Tap beacon dots to calibrate");
+        updateCalibrationStatusLine();
+
+        btnCalibrate.setText("Done Calibrating");
+        btnCalibrate.setBackgroundResource(R.drawable.btn_teal);
+        btnCalibrate.setTextColor(ContextCompat.getColor(requireContext(), android.R.color.white));
+        btnStartSession.setVisibility(View.VISIBLE);
+
+        ((MainActivity) requireActivity()).stopScannerForRecording();
+        bleScanner.startScan();
+
+        if (orientationSensor != null) {
+            orientationSensor.start(requireActivity());
+        }
+
+        modelHandler.postDelayed(calibrationEvalRunnable, modelEvalIntervalMs);
+    }
+
+    private void stopCalibrationMode() {
+        isCalibrating = false;
+        modelHandler.removeCallbacks(calibrationEvalRunnable);
+        bleScanner.stopScan();
+
+        if (orientationSensor != null) {
+            orientationSensor.stop();
+        }
+
+        ((MainActivity) requireActivity()).resumeScannerAfterRecording();
+
+        p2BeaconMap.clear();
+        autoPositionCounter = 0;
+        positioningCanvas.clear();
+
+        formSection.setVisibility(View.VISIBLE);
+        btnCalibrate.setText("Calibration Mode");
+        btnCalibrate.setBackgroundResource(R.drawable.btn_grey);
+        btnCalibrate.setTextColor(ContextCompat.getColor(requireContext(), R.color.text_primary));
+
+        updateCalibrationStatusLine();
+    }
+
+    private void onBeaconDuringCalibration(Beacon beacon) {
+        if (beacon.getRssi() == 127) return;
+
+        String compositeId = beacon.getId1().toString();
+        if (beacon.getIdentifiers().size() >= 2) compositeId += ":" + beacon.getId2();
+        if (beacon.getIdentifiers().size() >= 3) compositeId += ":" + beacon.getId3();
+
+        P2BeaconSample sample = p2BeaconMap.get(compositeId);
+        if (sample == null) {
+            double[] pos = getBeaconPosition(compositeId, beacon);
+            sample = new P2BeaconSample(
+                    compositeId, pos[0], pos[1],
+                    kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
+            com.beaconiq.trilateration.model.Beacon cal =
+                    calibrationStore.getBeacon(compositeId);
+            if (cal != null) {
+                sample.setTxPowerOverride(cal.getTxPower());
+            }
+            p2BeaconMap.put(compositeId, sample);
+        }
+        sample.addRssi(beacon.getRssi());
+    }
+
+    private void updateCalibratedKeys() {
+        Set<String> keys = new HashSet<>();
+        for (String compositeId : p2BeaconMap.keySet()) {
+            if (calibrationStore.getBeacon(compositeId) != null) {
+                keys.add(compositeId);
+            }
+        }
+        positioningCanvas.setCalibratedKeys(keys);
+    }
+
+    private void updateCalibrationStatusLine() {
+        if (tvCalibrationStatus == null) return;
+        int totalVisible = p2BeaconMap.size();
+        int calibratedVisible = 0;
+        StringBuilder sb = new StringBuilder();
+        for (String id : p2BeaconMap.keySet()) {
+            com.beaconiq.trilateration.model.Beacon b = calibrationStore.getBeacon(id);
+            String[] parts = id.split(":");
+            String label = parts.length >= 3 ? parts[1] + "," + parts[2] : id;
+            if (b != null) {
+                calibratedVisible++;
+                sb.append(" [").append(label)
+                        .append(" | TX:").append((int) b.getTxPower()).append("]");
+            } else {
+                sb.append(" [").append(label).append(" ✗]");
+            }
+        }
+        String text = "Calibrated: " + calibratedVisible + "/" + totalVisible;
+        if (sb.length() > 0) text += "\n" + sb.toString().trim();
+        tvCalibrationStatus.setText(text);
+    }
+
+    private void showCalibrationDialog(String compositeId, double currentX, double currentY) {
+        if (!isAdded()) return;
+
+        String[] parts = compositeId.split(":");
+        String uuid = parts.length >= 1 ? parts[0] : "";
+        String major = parts.length >= 2 ? parts[1] : "?";
+        String minor = parts.length >= 3 ? parts[2] : "?";
+
+        com.beaconiq.trilateration.model.Beacon saved = calibrationStore.getBeacon(compositeId);
+        double startX = saved != null ? saved.getX() : currentX;
+        double startY = saved != null ? saved.getY() : currentY;
+        final double[] calibratedTxPower = {saved != null ? saved.getTxPower() : txPower};
+
+        Context ctx = requireContext();
+        LinearLayout layout = new LinearLayout(ctx);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (20 * getResources().getDisplayMetrics().density);
+        layout.setPadding(pad, pad / 2, pad, 0);
+
+        TextView subtitle = new TextView(ctx);
+        subtitle.setText("uuid: " + uuid.substring(0, Math.min(uuid.length(), 18)) + "...");
+        subtitle.setTextColor(0xFF9E9E9E);
+        subtitle.setTextSize(12f);
+        layout.addView(subtitle);
+
+        TextView labelX = new TextView(ctx);
+        labelX.setText("X (meters)");
+        labelX.setTextColor(0xFFE0E0E0);
+        labelX.setPadding(0, pad / 2, 0, 4);
+        layout.addView(labelX);
+
+        EditText editX = new EditText(ctx);
+        editX.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        editX.setText(String.format(Locale.US, "%.2f", startX));
+        editX.setTextColor(0xFFFFFFFF);
+        editX.setBackgroundColor(0xFF424242);
+        editX.setPadding(16, 12, 16, 12);
+        layout.addView(editX);
+
+        TextView labelY = new TextView(ctx);
+        labelY.setText("Y (meters)");
+        labelY.setTextColor(0xFFE0E0E0);
+        labelY.setPadding(0, pad / 2, 0, 4);
+        layout.addView(labelY);
+
+        EditText editY = new EditText(ctx);
+        editY.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        editY.setText(String.format(Locale.US, "%.2f", startY));
+        editY.setTextColor(0xFFFFFFFF);
+        editY.setBackgroundColor(0xFF424242);
+        editY.setPadding(16, 12, 16, 12);
+        layout.addView(editY);
+
+        TextView tvTxPower = new TextView(ctx);
+        tvTxPower.setText(String.format(Locale.US, "TX Power: %d dBm", (int) calibratedTxPower[0]));
+        tvTxPower.setTextColor(0xFFE0E0E0);
+        tvTxPower.setPadding(0, pad, 0, 4);
+        layout.addView(tvTxPower);
+
+        P2BeaconSample sample = p2BeaconMap.get(compositeId);
+
+        TextView tvLiveRssi = new TextView(ctx);
+        int liveRssi = sample != null ? sample.getLastRawRssi() : 0;
+        tvLiveRssi.setText(String.format(Locale.US, "Current RSSI: %d dBm", liveRssi));
+        tvLiveRssi.setTextColor(0xFF9E9E9E);
+        tvLiveRssi.setTextSize(12f);
+        layout.addView(tvLiveRssi);
+
+        ProgressBar progressBar = new ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setMax(100);
+        progressBar.setProgress(0);
+        progressBar.setVisibility(View.GONE);
+        layout.addView(progressBar);
+
+        Button btnCalibrateBtn = new Button(ctx);
+        btnCalibrateBtn.setText("Calibrate TX (stand 1m away)");
+        btnCalibrateBtn.setTextSize(13f);
+        btnCalibrateBtn.setAllCaps(false);
+
+        btnCalibrateBtn.setOnClickListener(v -> {
+            btnCalibrateBtn.setEnabled(false);
+            btnCalibrateBtn.setText("Sampling...");
+            progressBar.setVisibility(View.VISIBLE);
+            progressBar.setProgress(0);
+
+            final List<Integer> rssiSamples = new ArrayList<>();
+            final long sampleDurationMs = 5000;
+            final long sampleIntervalMs = 200;
+            final int totalSteps = (int) (sampleDurationMs / sampleIntervalMs);
+
+            Runnable[] sampleRunnable = new Runnable[1];
+            final int[] step = {0};
+            sampleRunnable[0] = () -> {
+                P2BeaconSample s = p2BeaconMap.get(compositeId);
+                if (s != null && s.getLastRawRssi() != 0) {
+                    rssiSamples.add(s.getLastRawRssi());
+                }
+                step[0]++;
+                progressBar.setProgress((step[0] * 100) / totalSteps);
+
+                if (step[0] < totalSteps) {
+                    modelHandler.postDelayed(sampleRunnable[0], sampleIntervalMs);
+                } else {
+                    progressBar.setVisibility(View.GONE);
+                    if (!rssiSamples.isEmpty()) {
+                        int sum = 0;
+                        for (int r : rssiSamples) sum += r;
+                        calibratedTxPower[0] = sum / rssiSamples.size();
+                        tvTxPower.setText(String.format(Locale.US,
+                                "TX Power: %d dBm (calibrated)", (int) calibratedTxPower[0]));
+                    }
+                    btnCalibrateBtn.setEnabled(true);
+                    btnCalibrateBtn.setText("Calibrate TX (stand 1m away)");
+                }
+            };
+            modelHandler.post(sampleRunnable[0]);
+        });
+        layout.addView(btnCalibrateBtn);
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog)
+                .setTitle("Beacon " + major + "," + minor)
+                .setView(layout)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    double newX, newY;
+                    try {
+                        newX = Double.parseDouble(editX.getText().toString().trim());
+                        newY = Double.parseDouble(editY.getText().toString().trim());
+                    } catch (NumberFormatException e) {
+                        Toast.makeText(ctx, "Invalid coordinates", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    int majorInt = 0, minorInt = 0;
+                    try { majorInt = Integer.parseInt(major); } catch (NumberFormatException ignored) {}
+                    try { minorInt = Integer.parseInt(minor); } catch (NumberFormatException ignored) {}
+
+                    com.beaconiq.trilateration.model.Beacon beacon =
+                            new com.beaconiq.trilateration.model.Beacon(
+                                    uuid, majorInt, minorInt, newX, newY,
+                                    calibratedTxPower[0], pathLossN);
+                    calibrationStore.saveBeacon(beacon);
+
+                    P2BeaconSample existing = p2BeaconMap.get(compositeId);
+                    if (existing != null) {
+                        existing.setCoordinates(newX, newY);
+                    }
+                    updateCalibratedKeys();
+                    updateCalibrationStatusLine();
+                    Toast.makeText(ctx, "Beacon " + major + "," + minor + " saved", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Cancel", null);
+
+        if (saved != null) {
+            builder.setNeutralButton("Delete", (dialog, which) -> {
+                calibrationStore.removeBeacon(compositeId);
+                updateCalibratedKeys();
+                updateCalibrationStatusLine();
+                Toast.makeText(ctx, "Calibration removed", Toast.LENGTH_SHORT).show();
+            });
+        }
+
+        builder.show();
+    }
+
     private void updateModelStatusPanel() {
         int active = countActiveBeacons();
         String uid = closestBeaconUid != null ? shortUid(closestBeaconUid) : "---";
@@ -1096,6 +1456,10 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
 
     @Override
     public void onBeaconDiscovered(Beacon beacon, byte[] scanRecord) {
+        if (isCalibrating) {
+            onBeaconDuringCalibration(beacon);
+            return;
+        }
         if (!isRecording) return;
 
         totalScanResults++;
@@ -1124,6 +1488,11 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
                 sample = new P2BeaconSample(
                         compositeId, pos[0], pos[1],
                         kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
+                com.beaconiq.trilateration.model.Beacon cal =
+                        calibrationStore.getBeacon(compositeId);
+                if (cal != null) {
+                    sample.setTxPowerOverride(cal.getTxPower());
+                }
                 p2BeaconMap.put(compositeId, sample);
             }
             sample.addRssi(beacon.getRssi());
@@ -1233,6 +1602,9 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
     @Override
     public void onPause() {
         super.onPause();
+        if (isCalibrating) {
+            stopCalibrationMode();
+        }
         if (isRecording) {
             endSession();
         }
@@ -1243,6 +1615,7 @@ public class TestFragment extends Fragment implements BleScanner.ScanListener {
         super.onDestroyView();
         timerHandler.removeCallbacks(timerRunnable);
         modelHandler.removeCallbacks(modelEvalRunnable);
+        modelHandler.removeCallbacks(calibrationEvalRunnable);
         if (orientationSensor != null) {
             orientationSensor.stop();
         }
