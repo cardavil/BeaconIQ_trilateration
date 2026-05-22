@@ -593,6 +593,18 @@ public abstract class BaseTestFragment extends Fragment implements BleScanner.Sc
         session.put("scale_factor", scaleFactor);
         session.put("beacon_timeout_ms", beaconTimeoutMs);
         session.put("eval_interval_ms", modelEvalIntervalMs);
+        session.put("solver_type", "N/A");
+        JSONArray beaconConfig = new JSONArray();
+        for (com.beaconiq.trilateration.model.Beacon b : calibrationStore.getAllBeacons()) {
+            JSONObject bc = new JSONObject();
+            bc.put("id", b.getMajor() + "," + b.getMinor());
+            bc.put("x", b.getX());
+            bc.put("y", b.getY());
+            bc.put("tx", b.getTxPower());
+            bc.put("n", b.getPathLossN());
+            beaconConfig.put(bc);
+        }
+        session.put("beacon_config", beaconConfig.toString());
         session.put("notes", editNotes.getText().toString().trim());
 
         JSONArray readingsArray = new JSONArray();
@@ -751,6 +763,7 @@ public abstract class BaseTestFragment extends Fragment implements BleScanner.Sc
         reading.put("minor", minor);
         reading.put("rssi_raw", beacon.getRssi());
         reading.put("rssi_filtered", filteredRssi != null ? Math.round(filteredRssi * 100.0) / 100.0 : "");
+        reading.put("tx_power_adv", beacon.getTxPower());
         reading.put("distance_m", Math.round(distance * 100.0) / 100.0);
         double[] pos = estimatedPosition;
         reading.put("est_x", pos != null ? Math.round(pos[0] * 100.0) / 100.0 : "");
