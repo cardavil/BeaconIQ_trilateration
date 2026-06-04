@@ -1,3 +1,32 @@
 <resources>
     <string name="app_name">BeaconIQ</string>
+
+    <!-- Positioning canvas -->
+    <string name="canvas_waiting_beacons">Waiting for beacons…</string>
+    <string name="canvas_need_beacons">Need 3+ beacons (%1$d active)</string>
+
+    <!-- Device list -->
+    <string name="device_unknown">(unknown)</string>
+
+    <!-- Beacon cards -->
+    <string name="beacon_card_label">Beacon %1$s</string>
+    <string name="beacon_card_distance">%1$.1f m</string>
+    <string name="beacon_card_rssi">%1$d dBm</string>
+
+    <!-- Calibration dialog -->
+    <string name="calib_title">Beacon %1$s,%2$s</string>
+    <string name="calib_uuid">uuid: %1$s…</string>
+    <string name="calib_label_x">X (meters)</string>
+    <string name="calib_label_y">Y (meters)</string>
+    <string name="calib_tx_power">TX Power: %1$d dBm</string>
+    <string name="calib_tx_power_calibrated">TX Power: %1$d dBm (calibrated)</string>
+    <string name="calib_current_rssi">Current RSSI: %1$d dBm</string>
+    <string name="calib_btn_calibrate">Calibrate TX (stand 1m away)</string>
+    <string name="calib_btn_sampling">Sampling…</string>
+    <string name="calib_save">Save</string>
+    <string name="calib_cancel">Cancel</string>
+    <string name="calib_delete">Delete</string>
+    <string name="calib_invalid_coords">Invalid coordinates</string>
+    <string name="calib_saved">Beacon %1$s,%2$s saved</string>
+    <string name="calib_removed">Calibration removed</string>
 </resources>

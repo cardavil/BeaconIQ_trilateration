@@ -90,18 +90,9 @@
 
                 <EditText
                     android:id="@+id/edit_duration"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:background="@drawable/edit_border"
-                    android:fontFamily="monospace"
+                    style="@style/Widget.BeaconIQ.ParamInput"
                     android:hint="60"
-                    android:importantForAutofill="no"
-                    android:inputType="number"
-                    android:padding="10dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_dim"
-                    android:textSize="14sp" />
+                    android:inputType="number" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -130,17 +121,9 @@
 
                 <EditText
                     android:id="@+id/edit_room"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:background="@drawable/edit_border"
+                    style="@style/Widget.BeaconIQ.FormInput"
                     android:hint="Room name"
-                    android:importantForAutofill="no"
-                    android:inputType="text"
-                    android:padding="10dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_dim"
-                    android:textSize="14sp" />
+                    android:inputType="text" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -178,259 +161,10 @@
                         android:textSize="13sp"
                         android:textStyle="bold" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="TxPower (dBm, -100 to 0)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_tx_power"
+                    <include
+                        layout="@layout/include_model_params"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="-59"
-                        android:importantForAutofill="no"
-                        android:inputType="numberSigned"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="Path Loss N (1.0 to 6.0)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_path_loss"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="2.0"
-                        android:importantForAutofill="no"
-                        android:inputType="numberDecimal"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="RSSI Threshold (dBm, -120 to -20)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_rssi_threshold"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="-100"
-                        android:importantForAutofill="no"
-                        android:inputType="numberSigned"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="Kalman Q (0.001 – 1.0)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_kalman_q"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="0.05"
-                        android:importantForAutofill="no"
-                        android:inputType="numberDecimal"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="Kalman R (0.001 – 5.0)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_kalman_r"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="0.25"
-                        android:importantForAutofill="no"
-                        android:inputType="numberDecimal"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="RSSI Buffer Size (1 – 100)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_rssi_buffer"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="20"
-                        android:importantForAutofill="no"
-                        android:inputType="number"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="RSSI Time Window ms (500 – 30000)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_rssi_window"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="8000"
-                        android:importantForAutofill="no"
-                        android:inputType="number"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="Scale Factor (0.1 – 50.0)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_scale_factor"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="5.0"
-                        android:importantForAutofill="no"
-                        android:inputType="numberDecimal"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="Beacon Timeout ms (1000 – 30000)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_beacon_timeout"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="4000"
-                        android:importantForAutofill="no"
-                        android:inputType="number"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="14dp"
-                        android:text="Eval Interval ms (500 – 30000)"
-                        android:textColor="@color/text_primary"
-                        android:textSize="14sp" />
-
-                    <EditText
-                        android:id="@+id/edit_eval_interval"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:background="@drawable/edit_border"
-                        android:fontFamily="monospace"
-                        android:hint="3000"
-                        android:importantForAutofill="no"
-                        android:inputType="number"
-                        android:padding="10dp"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_dim"
-                        android:textSize="14sp" />
-
-                    <LinearLayout
-                        android:id="@+id/solver_section"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="14dp"
-                            android:text="Solver"
-                            android:textColor="@color/text_primary"
-                            android:textSize="14sp" />
-
-                        <Spinner
-                            android:id="@+id/spinner_solver"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
-                            android:background="@drawable/spinner_border"
-                            android:padding="10dp"
-                            android:popupBackground="@color/bg" />
-                    </LinearLayout>
+                        android:layout_height="wrap_content" />
 
                     <Button
                         android:id="@+id/btn_reset_defaults"
@@ -454,20 +188,12 @@
 
                 <EditText
                     android:id="@+id/edit_notes"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:background="@drawable/edit_border"
+                    style="@style/Widget.BeaconIQ.FormInput"
                     android:gravity="top"
                     android:hint="Observations (metal shelf, open door, people walking...)"
-                    android:importantForAutofill="no"
                     android:inputType="textMultiLine"
                     android:maxLines="3"
-                    android:minLines="3"
-                    android:padding="10dp"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_dim"
-                    android:textSize="14sp" />
+                    android:minLines="3" />
             </LinearLayout>
 
             <!-- Model status panel (visible during recording) -->
@@ -548,10 +274,27 @@
                     android:text="Calibrated: 0/0"
                     android:textColor="@color/text_dim"
                     android:textSize="13sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="Ground-truth zone (visible beacons, ✓ = calibrated)"
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp" />
+
+                <Spinner
+                    android:id="@+id/spinner_ground_truth"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/spinner_border"
+                    android:padding="10dp"
+                    android:popupBackground="@color/bg" />
             </LinearLayout>
 
             <!-- 2D positioning canvas (visible during recording) -->
-            <com.beaconiq.trilateration.ui.PositioningCanvasView
+            <beaconiq.ui.PositioningCanvasView
                 android:id="@+id/positioning_canvas"
                 android:layout_width="match_parent"
                 android:layout_height="200dp"

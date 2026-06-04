@@ -1,9 +1,23 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
 }
 
+// Endpoint + auth token are read from the untracked local.properties so they
+// are not baked into version-controlled source. Fresh checkouts must add:
+//   beaconiq.endpoint=<Apps Script /exec URL>
+//   beaconiq.token=<shared secret>
+// (absent values fall back to empty strings — uploads will fail until set).
+val beaconiqProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val beaconiqEndpoint: String = beaconiqProps.getProperty("beaconiq.endpoint", "")
+val beaconiqToken: String = beaconiqProps.getProperty("beaconiq.token", "")
+
 android {
-    namespace = "com.beaconiq.trilateration"
+    namespace = "beaconiq"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -11,13 +25,20 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.beaconiq.trilateration"
+        applicationId = "beaconiq.app"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "ENDPOINT_URL", "\"$beaconiqEndpoint\"")
+        buildConfigField("String", "AUTH_TOKEN", "\"$beaconiqToken\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     buildTypes {
@@ -45,13 +66,13 @@ dependencies {
     implementation(libs.appcompat)
     implementation(libs.constraintlayout)
     implementation(libs.material)
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
-    implementation("org.altbeacon:android-beacon-library:2.20.5")
+    implementation(libs.recyclerview)
+    implementation(libs.altbeacon)
     testImplementation(libs.junit)
-    testImplementation("org.robolectric:robolectric:4.12.2")
-    testImplementation("androidx.test:core:1.5.0")
-    testImplementation("androidx.test.ext:junit:1.1.5")
-    testImplementation("org.assertj:assertj-core:3.24.2")
+    testImplementation(libs.robolectric)
+    testImplementation(libs.test.core)
+    testImplementation(libs.ext.junit)
+    testImplementation(libs.assertj.core)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
 }

@@ -1,0 +1,463 @@
+package beaconiq.ui;
+
+import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.DashPathEffect;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.util.AttributeSet;
+import android.view.MotionEvent;
+import android.view.View;
+
+import androidx.core.content.ContextCompat;
+
+import beaconiq.R;
+import beaconiq.positioning.phase2.P2BeaconSample;
+
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+public class PositioningCanvasView extends View {
+
+    public interface OnBeaconTapListener {
+        void onBeaconTapped(String compositeId, double currentX, double currentY);
+    }
+
+    private static final int MAX_TRAIL_SIZE = 10;
+    private static final float BEACON_RADIUS = 18f;
+    private static final float CLOSEST_BEACON_RADIUS = 24f;
+    private static final float GLOW_RADIUS = 36f;
+    private static final float POSITION_RADIUS = 12f;
+    private static final float RING_RADIUS = 28f;
+    private static final float TAP_TOLERANCE = 8f;
+    private static final float PAD = 48f;
+
+    private Map<String, BeaconPos> beaconMap = new HashMap<>();
+    private double[] estimatedPosition;
+    private String closestBeaconKey;
+    private final Deque<double[]> positionTrail = new ArrayDeque<>();
+
+    private float compassAzimuth = 0f;
+    private float tiltPitch = 0f;
+    private float tiltRoll = 0f;
+
+    private Set<String> cachedBeaconKeys;
+    private double cachedMinX, cachedMaxX, cachedMinY, cachedMaxY;
+
+    private double lastScale, lastOffX, lastOffY;
+    private boolean drawParamsReady;
+    private Set<String> calibratedKeys = Collections.emptySet();
+    private OnBeaconTapListener beaconTapListener;
+
+    private final Paint beaconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint closestBeaconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint positionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint messagePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint dottedLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint badgeBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint badgeTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint compassBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint compassNeedlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint compassLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint tiltBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint tiltDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint calibratedBeaconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    public PositioningCanvasView(Context context) {
+        super(context);
+        init();
+    }
+
+    public PositioningCanvasView(Context context, AttributeSet attrs) {
+        super(context, attrs);
+        init();
+    }
+
+    public PositioningCanvasView(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        init();
+    }
+
+    private void init() {
+        setLayerType(LAYER_TYPE_SOFTWARE, null);
+        Context ctx = getContext();
+
+        beaconPaint.setColor(ContextCompat.getColor(ctx, R.color.teal));
+        beaconPaint.setStyle(Paint.Style.FILL);
+
+        closestBeaconPaint.setColor(ContextCompat.getColor(ctx, R.color.status_warn));
+        closestBeaconPaint.setStyle(Paint.Style.FILL);
+
+        glowPaint.setColor(ContextCompat.getColor(ctx, R.color.beacon_glow));
+        glowPaint.setStyle(Paint.Style.FILL);
+
+        positionPaint.setColor(ContextCompat.getColor(ctx, R.color.status_alert));
+        positionPaint.setStyle(Paint.Style.FILL);
+
+        ringPaint.setColor(ContextCompat.getColor(ctx, R.color.position_ring));
+        ringPaint.setStyle(Paint.Style.FILL);
+
+        labelPaint.setColor(ContextCompat.getColor(ctx, R.color.black));
+        labelPaint.setTextSize(24f);
+        labelPaint.setTextAlign(Paint.Align.CENTER);
+
+        messagePaint.setColor(ContextCompat.getColor(ctx, R.color.grey_mid));
+        messagePaint.setTextSize(32f);
+        messagePaint.setTextAlign(Paint.Align.CENTER);
+
+        borderPaint.setColor(ContextCompat.getColor(ctx, R.color.grey_light));
+        borderPaint.setStyle(Paint.Style.STROKE);
+        borderPaint.setStrokeWidth(2f);
+
+        dottedLinePaint.setColor(ContextCompat.getColor(ctx, R.color.grey_mid));
+        dottedLinePaint.setStyle(Paint.Style.STROKE);
+        dottedLinePaint.setStrokeWidth(2f);
+        dottedLinePaint.setPathEffect(new DashPathEffect(new float[]{10f, 10f}, 0f));
+
+        trailPaint.setColor(ContextCompat.getColor(ctx, R.color.status_alert));
+        trailPaint.setStyle(Paint.Style.FILL);
+
+        badgeBgPaint.setColor(ContextCompat.getColor(ctx, R.color.canvas_badge_bg));
+        badgeBgPaint.setStyle(Paint.Style.FILL);
+
+        badgeTextPaint.setColor(ContextCompat.getColor(ctx, R.color.grey_dark));
+        badgeTextPaint.setTextSize(20f);
+        badgeTextPaint.setTextAlign(Paint.Align.CENTER);
+
+        compassBgPaint.setColor(ContextCompat.getColor(ctx, R.color.canvas_overlay_bg));
+        compassBgPaint.setStyle(Paint.Style.FILL);
+
+        compassNeedlePaint.setColor(ContextCompat.getColor(ctx, R.color.canvas_compass_needle));
+        compassNeedlePaint.setStyle(Paint.Style.FILL);
+
+        compassLabelPaint.setColor(ContextCompat.getColor(ctx, R.color.grey_dark));
+        compassLabelPaint.setTextSize(18f);
+        compassLabelPaint.setTextAlign(Paint.Align.CENTER);
+
+        tiltBgPaint.setColor(ContextCompat.getColor(ctx, R.color.canvas_overlay_bg));
+        tiltBgPaint.setStyle(Paint.Style.STROKE);
+        tiltBgPaint.setStrokeWidth(2f);
+
+        tiltDotPaint.setColor(ContextCompat.getColor(ctx, R.color.teal));
+        tiltDotPaint.setStyle(Paint.Style.FILL);
+
+        calibratedBeaconPaint.setColor(ContextCompat.getColor(ctx, R.color.beacon_calibrated));
+        calibratedBeaconPaint.setStyle(Paint.Style.FILL);
+    }
+
+    // Phase II entry point
+    public void updateP2(Map<String, P2BeaconSample> beacons,
+                         double[] position) {
+        updateP2(beacons, position, null);
+    }
+
+    // Phase II entry point with closest beacon
+    public void updateP2(Map<String, P2BeaconSample> beacons,
+                         double[] position, String closestKey) {
+        Map<String, BeaconPos> converted = new HashMap<>();
+        for (Map.Entry<String, P2BeaconSample> e : beacons.entrySet()) {
+            P2BeaconSample b = e.getValue();
+            // Liveness flag only (drives the ">= 3 beacons" gate); the drawn
+            // distance badge is geometric, computed in drawDistanceBadge().
+            Double liveDistance = b.isLive() ? b.getLastFilteredDistance() : null;
+            converted.put(e.getKey(), new BeaconPos(b.getX(), b.getY(), liveDistance));
+        }
+        updateInternal(converted, position, closestKey);
+    }
+
+    private void updateInternal(Map<String, BeaconPos> beacons, double[] position, String closestKey) {
+        this.beaconMap = beacons;
+        this.closestBeaconKey = closestKey;
+
+        if (position != null) {
+            positionTrail.addLast(new double[]{position[0], position[1]});
+            while (positionTrail.size() > MAX_TRAIL_SIZE) positionTrail.removeFirst();
+        }
+        this.estimatedPosition = position;
+
+        // Beacon coordinates are stable except when calibration moves one, so a
+        // per-update recompute is cheap and stable — and unlike the old
+        // key-set-only check, it rescales when a calibrated beacon moves.
+        recalculateBounds();
+        invalidate();
+    }
+
+    public void updateOrientation(float azimuth, float pitch, float roll) {
+        this.compassAzimuth = azimuth;
+        this.tiltPitch = pitch;
+        this.tiltRoll = roll;
+        invalidate();
+    }
+
+    public void clear() {
+        beaconMap.clear();
+        estimatedPosition = null;
+        closestBeaconKey = null;
+        positionTrail.clear();
+        cachedBeaconKeys = null;
+        drawParamsReady = false;
+        invalidate();
+    }
+
+    public void setOnBeaconTapListener(OnBeaconTapListener listener) {
+        this.beaconTapListener = listener;
+    }
+
+    public void setCalibratedKeys(Set<String> keys) {
+        this.calibratedKeys = keys != null ? keys : Collections.<String>emptySet();
+        invalidate();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event.getAction() != MotionEvent.ACTION_UP) return true;
+        if (beaconTapListener == null || !drawParamsReady || beaconMap.isEmpty()) {
+            return super.onTouchEvent(event);
+        }
+        float tapX = event.getX();
+        float tapY = event.getY();
+        for (Map.Entry<String, BeaconPos> entry : beaconMap.entrySet()) {
+            BeaconPos b = entry.getValue();
+            float bx = toScreenX(b.x, lastScale, lastOffX);
+            float by = toScreenY(b.y, lastScale, lastOffY);
+            float dx = tapX - bx;
+            float dy = tapY - by;
+            if (dx * dx + dy * dy <= (BEACON_RADIUS + TAP_TOLERANCE) * (BEACON_RADIUS + TAP_TOLERANCE)) {
+                beaconTapListener.onBeaconTapped(entry.getKey(), b.x, b.y);
+                return true;
+            }
+        }
+        return super.onTouchEvent(event);
+    }
+
+    private void recalculateBounds() {
+        if (beaconMap.isEmpty()) return;
+        cachedBeaconKeys = new HashSet<>(beaconMap.keySet());
+        double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE;
+        double minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        for (BeaconPos b : beaconMap.values()) {
+            minX = Math.min(minX, b.x);
+            maxX = Math.max(maxX, b.x);
+            minY = Math.min(minY, b.y);
+            maxY = Math.max(maxY, b.y);
+        }
+        double rangeX = maxX - minX;
+        double rangeY = maxY - minY;
+        if (rangeX < 1) { minX -= 5; maxX += 5; rangeX = 10; }
+        if (rangeY < 1) { minY -= 5; maxY += 5; rangeY = 10; }
+        minX -= rangeX * 0.25;
+        maxX += rangeX * 0.25;
+        minY -= rangeY * 0.25;
+        maxY += rangeY * 0.25;
+        cachedMinX = minX;
+        cachedMaxX = maxX;
+        cachedMinY = minY;
+        cachedMaxY = maxY;
+    }
+
+    private int countActive() {
+        int count = 0;
+        for (BeaconPos b : beaconMap.values()) {
+            if (b.filteredDistance != null) count++;
+        }
+        return count;
+    }
+
+    @Override
+    protected void onDraw(Canvas canvas) {
+        super.onDraw(canvas);
+        canvas.drawColor(ContextCompat.getColor(getContext(), R.color.surface_2));
+
+        int w = getWidth();
+        int h = getHeight();
+        canvas.drawRect(0, 0, w, h, borderPaint);
+
+        if (beaconMap.isEmpty()) {
+            canvas.drawText(getContext().getString(R.string.canvas_waiting_beacons),
+                    w / 2f, h / 2f, messagePaint);
+            drawCompass(canvas, w);
+            drawTiltIndicator(canvas);
+            return;
+        }
+
+        int active = countActive();
+        if (active < 3) {
+            canvas.drawText(getContext().getString(R.string.canvas_need_beacons, active),
+                    w / 2f, h / 2f, messagePaint);
+        }
+
+        if (cachedBeaconKeys == null) {
+            recalculateBounds();
+        }
+
+        double drawW = w - 2 * PAD;
+        double drawH = h - 2 * PAD;
+        double scaleX = drawW / (cachedMaxX - cachedMinX);
+        double scaleY = drawH / (cachedMaxY - cachedMinY);
+        double scale = Math.min(scaleX, scaleY);
+        double offX = PAD + (drawW - (cachedMaxX - cachedMinX) * scale) / 2;
+        double offY = PAD + (drawH - (cachedMaxY - cachedMinY) * scale) / 2;
+
+        lastScale = scale;
+        lastOffX = offX;
+        lastOffY = offY;
+        drawParamsReady = true;
+
+        drawBeacons(canvas, scale, offX, offY);
+        drawTrail(canvas, scale, offX, offY);
+        drawDottedLineToClosest(canvas, scale, offX, offY, active);
+        drawPosition(canvas, scale, offX, offY, active);
+        drawDistanceBadge(canvas, scale, offX, offY, active);
+        drawCompass(canvas, w);
+        drawTiltIndicator(canvas);
+    }
+
+    private float toScreenX(double worldX, double scale, double offX) {
+        return (float) (offX + (worldX - cachedMinX) * scale);
+    }
+
+    private float toScreenY(double worldY, double scale, double offY) {
+        return (float) (offY + (cachedMaxY - worldY) * scale);
+    }
+
+    private void drawBeacons(Canvas canvas, double scale, double offX, double offY) {
+        for (Map.Entry<String, BeaconPos> entry : beaconMap.entrySet()) {
+            BeaconPos b = entry.getValue();
+            float cx = toScreenX(b.x, scale, offX);
+            float cy = toScreenY(b.y, scale, offY);
+
+            boolean isClosest = entry.getKey().equals(closestBeaconKey);
+            boolean isCalibrated = calibratedKeys.contains(entry.getKey());
+
+            if (isClosest) {
+                canvas.drawCircle(cx, cy, GLOW_RADIUS, glowPaint);
+                canvas.drawCircle(cx, cy, CLOSEST_BEACON_RADIUS, closestBeaconPaint);
+            } else {
+                canvas.drawCircle(cx, cy, BEACON_RADIUS,
+                        isCalibrated ? calibratedBeaconPaint : beaconPaint);
+            }
+
+            String label = entry.getKey();
+            String[] parts = label.split(":");
+            if (parts.length >= 3) label = parts[1] + "," + parts[2];
+            canvas.drawText(label, cx, cy - (isClosest ? 30f : 24f), labelPaint);
+        }
+    }
+
+    private void drawTrail(Canvas canvas, double scale, double offX, double offY) {
+        if (positionTrail.isEmpty()) return;
+        int i = 0;
+        int size = positionTrail.size();
+        for (double[] p : positionTrail) {
+            float px = toScreenX(p[0], scale, offX);
+            float py = toScreenY(p[1], scale, offY);
+            int alpha = 30 + (150 * i / Math.max(size - 1, 1));
+            trailPaint.setAlpha(alpha);
+            canvas.drawCircle(px, py, 6f, trailPaint);
+            i++;
+        }
+    }
+
+    private void drawDottedLineToClosest(Canvas canvas, double scale, double offX, double offY,
+                                          int active) {
+        if (estimatedPosition == null || active < 3 || closestBeaconKey == null) return;
+        BeaconPos closest = beaconMap.get(closestBeaconKey);
+        if (closest == null) return;
+
+        float px = toScreenX(estimatedPosition[0], scale, offX);
+        float py = toScreenY(estimatedPosition[1], scale, offY);
+        float bx = toScreenX(closest.x, scale, offX);
+        float by = toScreenY(closest.y, scale, offY);
+
+        canvas.drawLine(px, py, bx, by, dottedLinePaint);
+    }
+
+    private void drawPosition(Canvas canvas, double scale, double offX, double offY, int active) {
+        if (estimatedPosition == null || active < 3) return;
+        float px = toScreenX(estimatedPosition[0], scale, offX);
+        float py = toScreenY(estimatedPosition[1], scale, offY);
+        canvas.drawCircle(px, py, RING_RADIUS, ringPaint);
+        canvas.drawCircle(px, py, POSITION_RADIUS, positionPaint);
+    }
+
+    private void drawDistanceBadge(Canvas canvas, double scale, double offX, double offY,
+                                    int active) {
+        if (estimatedPosition == null || active < 3 || closestBeaconKey == null) return;
+        BeaconPos closest = beaconMap.get(closestBeaconKey);
+        if (closest == null) return;
+
+        double dx = estimatedPosition[0] - closest.x;
+        double dy = estimatedPosition[1] - closest.y;
+        double dist = Math.sqrt(dx * dx + dy * dy);
+        String text = String.format(Locale.US, "%.1fm", dist);
+
+        float px = toScreenX(estimatedPosition[0], scale, offX);
+        float py = toScreenY(estimatedPosition[1], scale, offY);
+        float bx = toScreenX(closest.x, scale, offX);
+        float by = toScreenY(closest.y, scale, offY);
+        float midX = (px + bx) / 2f;
+        float midY = (py + by) / 2f;
+
+        float textWidth = badgeTextPaint.measureText(text);
+        float padH = 8f, padV = 4f;
+        RectF rect = new RectF(
+                midX - textWidth / 2f - padH,
+                midY - 12f - padV,
+                midX + textWidth / 2f + padH,
+                midY + 4f + padV);
+        canvas.drawRoundRect(rect, 6f, 6f, badgeBgPaint);
+        canvas.drawText(text, midX, midY, badgeTextPaint);
+    }
+
+    private void drawCompass(Canvas canvas, int viewWidth) {
+        float cx = viewWidth - 44f;
+        float cy = 44f;
+        float radius = 22f;
+
+        canvas.drawCircle(cx, cy, radius, compassBgPaint);
+
+        canvas.save();
+        canvas.rotate(-compassAzimuth, cx, cy);
+
+        Path needle = new Path();
+        needle.moveTo(cx, cy - radius + 4f);
+        needle.lineTo(cx - 5f, cy);
+        needle.lineTo(cx + 5f, cy);
+        needle.close();
+        canvas.drawPath(needle, compassNeedlePaint);
+
+        canvas.drawText("N", cx, cy - radius + 16f, compassLabelPaint);
+        canvas.restore();
+    }
+
+    private void drawTiltIndicator(Canvas canvas) {
+        float cx = 44f;
+        float cy = 44f;
+        float radius = 18f;
+
+        canvas.drawCircle(cx, cy, radius, tiltBgPaint);
+
+        float dotOffX = Math.max(-radius + 4, Math.min(radius - 4, tiltRoll / 90f * radius));
+        float dotOffY = Math.max(-radius + 4, Math.min(radius - 4, tiltPitch / 90f * radius));
+
+        canvas.drawCircle(cx + dotOffX, cy - dotOffY, 5f, tiltDotPaint);
+    }
+
+    private static class BeaconPos {
+        final double x, y;
+        final Double filteredDistance;
+        BeaconPos(double x, double y, Double d) { this.x = x; this.y = y; this.filteredDistance = d; }
+    }
+}

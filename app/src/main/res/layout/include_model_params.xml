@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Shared model-parameter panel. Core inputs (always shown) + two mode-specific
+    sections (trilateration_section, proximity_section) whose visibility the host
+    fragment toggles. Included by fragment_scan.xml and fragment_test.xml.
+    Hints reflect the documented defaults (see P2ModelConfig).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <!-- ===== Core (shared by both modes) ===== -->
+
+    <TextView
+        style="@style/Widget.BeaconIQ.ParamLabel"
+        android:text="TxPower (dBm, -100 to 0)" />
+
+    <EditText
+        android:id="@+id/edit_tx_power"
+        style="@style/Widget.BeaconIQ.ParamInput"
+        android:hint="-59"
+        android:inputType="numberSigned" />
+
+    <TextView
+        style="@style/Widget.BeaconIQ.ParamLabel"
+        android:text="RSSI Threshold (dBm, -120 to -20)" />
+
+    <EditText
+        android:id="@+id/edit_rssi_threshold"
+        style="@style/Widget.BeaconIQ.ParamInput"
+        android:hint="-100"
+        android:inputType="numberSigned" />
+
+    <TextView
+        style="@style/Widget.BeaconIQ.ParamLabel"
+        android:text="Kalman Q (0.001 – 1.0)" />
+
+    <EditText
+        android:id="@+id/edit_kalman_q"
+        style="@style/Widget.BeaconIQ.ParamInput"
+        android:hint="0.05"
+        android:inputType="numberDecimal" />
+
+    <TextView
+        style="@style/Widget.BeaconIQ.ParamLabel"
+        android:text="Kalman R (0.001 – 5.0)" />
+
+    <EditText
+        android:id="@+id/edit_kalman_r"
+        style="@style/Widget.BeaconIQ.ParamInput"
+        android:hint="0.25"
+        android:inputType="numberDecimal" />
+
+    <TextView
+        style="@style/Widget.BeaconIQ.ParamLabel"
+        android:text="RSSI Buffer Size (1 – 100)" />
+
+    <EditText
+        android:id="@+id/edit_rssi_buffer"
+        style="@style/Widget.BeaconIQ.ParamInput"
+        android:hint="20"
+        android:inputType="number" />
+
+    <TextView
+        style="@style/Widget.BeaconIQ.ParamLabel"
+        android:text="RSSI Time Window ms (500 – 30000)" />
+
+    <EditText
+        android:id="@+id/edit_rssi_window"
+        style="@style/Widget.BeaconIQ.ParamInput"
+        android:hint="8000"
+        android:inputType="number" />
+
+    <TextView
+        style="@style/Widget.BeaconIQ.ParamLabel"
+        android:text="Beacon Timeout ms (1000 – 30000)" />
+
+    <EditText
+        android:id="@+id/edit_beacon_timeout"
+        style="@style/Widget.BeaconIQ.ParamInput"
+        android:hint="4000"
+        android:inputType="number" />
+
+    <TextView
+        style="@style/Widget.BeaconIQ.ParamLabel"
+        android:text="Eval Interval ms (500 – 30000)" />
+
+    <EditText
+        android:id="@+id/edit_eval_interval"
+        style="@style/Widget.BeaconIQ.ParamInput"
+        android:hint="3000"
+        android:inputType="number" />
+
+    <!-- ===== Trilateration-only ===== -->
+
+    <LinearLayout
+        android:id="@+id/trilateration_section"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="Path Loss N (1.0 to 6.0)" />
+
+        <EditText
+            android:id="@+id/edit_path_loss"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="2.0"
+            android:inputType="numberDecimal" />
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="Scale Factor (0.1 – 50.0)" />
+
+        <EditText
+            android:id="@+id/edit_scale_factor"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="1.0"
+            android:inputType="numberDecimal" />
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="WCL Exponent g (1.0 – 6.0)" />
+
+        <EditText
+            android:id="@+id/edit_wcl_g"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="2.0"
+            android:inputType="numberDecimal" />
+    </LinearLayout>
+
+    <!-- ===== Proximity-only ===== -->
+
+    <LinearLayout
+        android:id="@+id/proximity_section"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="Hysteresis Margin (dB, 0 – 20)" />
+
+        <EditText
+            android:id="@+id/edit_hysteresis_margin"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="6.0"
+            android:inputType="numberDecimal" />
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="Dwell / debounce ms (0 – 10000)" />
+
+        <EditText
+            android:id="@+id/edit_dwell"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="1500"
+            android:inputType="number" />
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="Confidence Threshold (0.0 – 1.0)" />
+
+        <EditText
+            android:id="@+id/edit_confidence"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="0.4"
+            android:inputType="numberDecimal" />
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="Trigger Cooldown ms (0 – 60000)" />
+
+        <EditText
+            android:id="@+id/edit_trigger_cooldown"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="8000"
+            android:inputType="number" />
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="Min Samples (1 – 50)" />
+
+        <EditText
+            android:id="@+id/edit_min_samples"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="3"
+            android:inputType="number" />
+    </LinearLayout>
+
+</LinearLayout>

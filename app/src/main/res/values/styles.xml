@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Parameter panel: the label shown above each input -->
+    <style name="Widget.BeaconIQ.ParamLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- Parameter panel: monospace numeric input -->
+    <style name="Widget.BeaconIQ.ParamInput" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:background">@drawable/edit_border</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:importantForAutofill">no</item>
+        <item name="android:padding">10dp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textColorHint">@color/text_dim</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- Session form: free-text input (no monospace) -->
+    <style name="Widget.BeaconIQ.FormInput" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:background">@drawable/edit_border</item>
+        <item name="android:importantForAutofill">no</item>
+        <item name="android:padding">10dp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textColorHint">@color/text_dim</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+</resources>

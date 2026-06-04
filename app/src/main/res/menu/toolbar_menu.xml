@@ -6,12 +6,8 @@
         android:title="Explore"
         app:showAsAction="never" />
     <item
-        android:id="@+id/nav_recording_p1"
-        android:title="Signal Recording (Phase I)"
-        app:showAsAction="never" />
-    <item
         android:id="@+id/nav_recording_p2"
-        android:title="Signal Recording (Phase II)"
+        android:title="Signal Recording"
         app:showAsAction="never" />
     <item
         android:id="@+id/nav_permissions"

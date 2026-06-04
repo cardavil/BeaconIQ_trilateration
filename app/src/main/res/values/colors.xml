@@ -27,4 +27,18 @@
     <color name="colorAccent">#FF0AD0DF</color>
     <color name="window_bg">#FFE0F7FA</color>
     <color name="beacon_red">#FF7A2748</color>
+
+    <!-- Positioning canvas -->
+    <color name="beacon_glow">#4DFFC107</color>
+    <color name="position_ring">#44B61F23</color>
+    <color name="beacon_calibrated">#FF4CAF50</color>
+    <color name="canvas_badge_bg">#E6FFFFFF</color>
+    <color name="canvas_overlay_bg">#33BDBDBD</color>
+    <color name="canvas_compass_needle">#FFD32F2F</color>
+
+    <!-- Neutral greys (canvas + dialogs) -->
+    <color name="grey_mid">#FF9E9E9E</color>
+    <color name="grey_light">#FFBDBDBD</color>
+    <color name="grey_pale">#FFE0E0E0</color>
+    <color name="grey_dark">#FF424242</color>
 </resources>
