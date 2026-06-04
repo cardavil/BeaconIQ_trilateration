@@ -25,6 +25,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -188,8 +190,17 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         beaconBottomSheet = view.findViewById(R.id.beacon_bottom_sheet);
         beaconSheetHeader = view.findViewById(R.id.beacon_sheet_header);
         bottomSheetBehavior = BottomSheetBehavior.from(beaconBottomSheet);
-        bottomSheetBehavior.setPeekHeight(
-                (int) (220 * getResources().getDisplayMetrics().density));
+        // Collapsed peek shows only the drag handle + "NEARBY BEACONS" header bar,
+        // sitting just above the system navigation bar. Expand by dragging up to see
+        // the cards. Peek + bottom padding are recomputed when window insets arrive.
+        final int headerPeekPx = (int) (56 * getResources().getDisplayMetrics().density);
+        bottomSheetBehavior.setPeekHeight(headerPeekPx);
+        ViewCompat.setOnApplyWindowInsetsListener(beaconBottomSheet, (v, insets) -> {
+            int navBar = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
+            v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), navBar);
+            bottomSheetBehavior.setPeekHeight(headerPeekPx + navBar);
+            return insets;
+        });
         bottomSheetBehavior.setHideable(false);
         beaconBottomSheet.setVisibility(View.GONE);
 
