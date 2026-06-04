@@ -28,6 +28,9 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+
 import beaconiq.network.TestConsoleApi;
 import beaconiq.positioning.phase2.P2BeaconIds;
 import beaconiq.positioning.phase2.P2BeaconSample;
@@ -90,7 +93,8 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
     private EditText editKalmanQ, editKalmanR, editRssiBuffer, editRssiWindow;
     private EditText editScaleFactor, editBeaconTimeout, editEvalInterval;
     private EditText editWclG, editHysteresis, editDwell, editConfidence, editTriggerCooldown, editMinSamples;
-    private Spinner spinnerMovement, spinnerPhonePosition, spinnerGroundTruth;
+    private Spinner spinnerMovement, spinnerPhonePosition;
+    private ChipGroup groupGroundTruth;
     // Clean zone values ("major,minor") parallel to the ground-truth spinner items.
     private final List<String> gtValues = new ArrayList<>();
     private View modelParamsSection;
@@ -292,7 +296,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         editConfidence = view.findViewById(R.id.edit_confidence);
         editTriggerCooldown = view.findViewById(R.id.edit_trigger_cooldown);
         editMinSamples = view.findViewById(R.id.edit_min_samples);
-        spinnerGroundTruth = view.findViewById(R.id.spinner_ground_truth);
+        groupGroundTruth = view.findViewById(R.id.group_ground_truth);
         editNotes = view.findViewById(R.id.edit_notes);
         btnStartSession = view.findViewById(R.id.btn_start_session);
 
@@ -958,22 +962,30 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         gtValues.clear();
         gtValues.addAll(values);
 
-        List<String> display = new ArrayList<>();
-        for (String v : values) display.add(calSeen.contains(v) ? v + " ✓" : v);
-
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(),
-                R.layout.spinner_item, display);
-        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item);
-        spinnerGroundTruth.setAdapter(adapter);
+        // Rebuild the single-select chips in the same order as gtValues, so the
+        // checked chip's index maps directly back to a clean "major,minor" value.
+        groupGroundTruth.removeAllViews();
+        for (int i = 0; i < values.size(); i++) {
+            String v = values.get(i);
+            Chip chip = new Chip(requireContext());
+            chip.setText(calSeen.contains(v) ? v + " ✓" : v);
+            chip.setCheckable(true);
+            groupGroundTruth.addView(chip);
+        }
 
         int idx = gtValues.indexOf(previous);
-        if (idx >= 0) spinnerGroundTruth.setSelection(idx);
+        if (idx < 0 && !gtValues.isEmpty()) idx = 0; // default to first, as the spinner did
+        if (idx >= 0) ((Chip) groupGroundTruth.getChildAt(idx)).setChecked(true);
     }
 
-    /** Clean "major,minor" value currently selected in the ground-truth spinner. */
+    /** Clean "major,minor" value of the currently-checked ground-truth chip. */
     private String selectedGroundTruth() {
-        int pos = spinnerGroundTruth.getSelectedItemPosition();
-        return (pos >= 0 && pos < gtValues.size()) ? gtValues.get(pos) : "";
+        for (int i = 0; i < groupGroundTruth.getChildCount(); i++) {
+            if (((Chip) groupGroundTruth.getChildAt(i)).isChecked()) {
+                return i < gtValues.size() ? gtValues.get(i) : "";
+            }
+        }
+        return "";
     }
 
     private Double processP2Beacon(Beacon beacon, String compositeId) {

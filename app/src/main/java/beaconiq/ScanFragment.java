@@ -190,8 +190,8 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         bottomSheetBehavior = BottomSheetBehavior.from(beaconBottomSheet);
         bottomSheetBehavior.setPeekHeight(
                 (int) (220 * getResources().getDisplayMetrics().density));
-        bottomSheetBehavior.setHideable(true);
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        bottomSheetBehavior.setHideable(false);
+        beaconBottomSheet.setVisibility(View.GONE);
 
         RecyclerView beaconCardList = view.findViewById(R.id.beacon_card_list);
         beaconCardAdapter = new BeaconCardAdapter();
@@ -252,7 +252,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             engine.resetAutoPositionCounter();
 
             vibratedBeaconIds.clear();
-            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+            beaconBottomSheet.setVisibility(View.GONE);
             beaconCardAdapter.updateItems(Collections.emptyList());
         } else {
             applyAllParameters();
@@ -368,7 +368,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         engine.clear();
 
         vibratedBeaconIds.clear();
-        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        beaconBottomSheet.setVisibility(View.GONE);
         beaconCardAdapter.updateItems(Collections.emptyList());
     }
 

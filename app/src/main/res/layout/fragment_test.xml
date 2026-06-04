@@ -283,14 +283,13 @@
                     android:textColor="@color/text_muted"
                     android:textSize="12sp" />
 
-                <Spinner
-                    android:id="@+id/spinner_ground_truth"
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/group_ground_truth"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:background="@drawable/spinner_border"
-                    android:padding="10dp"
-                    android:popupBackground="@color/bg" />
+                    app:singleSelection="true"
+                    app:selectionRequired="true" />
             </LinearLayout>
 
             <!-- 2D positioning canvas (visible during recording) -->
