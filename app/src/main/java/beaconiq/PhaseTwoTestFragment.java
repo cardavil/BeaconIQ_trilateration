@@ -1119,8 +1119,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
             String label = parts.length >= 3 ? parts[1] + "," + parts[2] : id;
             if (b != null) {
                 calibratedVisible++;
-                sb.append(" [").append(label)
-                        .append(" | TX:").append((int) b.getTxPower()).append("]");
+                sb.append(" [").append(label).append(" ✓]");
             } else {
                 sb.append(" [").append(label).append(" ✗]");
             }

@@ -18,11 +18,6 @@
     <string name="calib_uuid">uuid: %1$s…</string>
     <string name="calib_label_x">X (meters)</string>
     <string name="calib_label_y">Y (meters)</string>
-    <string name="calib_tx_power">TX Power: %1$d dBm</string>
-    <string name="calib_tx_power_calibrated">TX Power: %1$d dBm (calibrated)</string>
-    <string name="calib_current_rssi">Current RSSI: %1$d dBm</string>
-    <string name="calib_btn_calibrate">Calibrate TX (stand 1m away)</string>
-    <string name="calib_btn_sampling">Sampling…</string>
     <string name="calib_save">Save</string>
     <string name="calib_cancel">Cancel</string>
     <string name="calib_delete">Delete</string>

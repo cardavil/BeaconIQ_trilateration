@@ -94,10 +94,8 @@ public class P2PositioningEngine {
             double[] pos = getBeaconPosition(beacon);
             sample = new P2BeaconSample(compositeId, pos[0], pos[1],
                     kalmanQ, kalmanR, rssiBufferSize, rssiTimeWindowMs);
-            beaconiq.model.Beacon cal = calibrationStore.getBeacon(compositeId);
-            if (cal != null) {
-                sample.setTxPowerOverride(cal.getTxPower());
-            }
+            // TX power is the global config value for every beacon (no per-beacon
+            // override). Only the coordinates come from CalibrationStore.
             beacons.put(compositeId, sample);
             isNew = true;
         }

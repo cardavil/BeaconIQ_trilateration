@@ -4,11 +4,8 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.os.Handler;
 import android.text.InputType;
-import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -19,8 +16,6 @@ import beaconiq.model.Beacon;
 import beaconiq.positioning.phase2.P2BeaconSample;
 import beaconiq.storage.CalibrationStore;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -56,7 +51,6 @@ public final class CalibrationDialog {
         Beacon saved = calibrationStore.getBeacon(compositeId);
         double startX = saved != null ? saved.getX() : currentX;
         double startY = saved != null ? saved.getY() : currentY;
-        final double[] calibratedTxPower = {saved != null ? saved.getTxPower() : defaultTxPower};
 
         LinearLayout layout = new LinearLayout(ctx);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -98,76 +92,6 @@ public final class CalibrationDialog {
         editY.setPadding(16, 12, 16, 12);
         layout.addView(editY);
 
-        TextView tvTxPower = new TextView(ctx);
-        tvTxPower.setText(ctx.getString(R.string.calib_tx_power, (int) calibratedTxPower[0]));
-        tvTxPower.setTextColor(ContextCompat.getColor(ctx, R.color.grey_pale));
-        tvTxPower.setPadding(0, pad, 0, 4);
-        layout.addView(tvTxPower);
-
-        // Held at method scope so the dialog's dismiss listener can cancel any
-        // pending sampling callbacks (otherwise they keep firing for up to 5s
-        // and touch views of an already-closed dialog).
-        final Runnable[] sampleRunnable = new Runnable[1];
-
-        P2BeaconSample sample = beaconMap.get(compositeId);
-
-        TextView tvLiveRssi = new TextView(ctx);
-        int liveRssi = sample != null ? sample.getLastRawRssi() : 0;
-        tvLiveRssi.setText(ctx.getString(R.string.calib_current_rssi, liveRssi));
-        tvLiveRssi.setTextColor(ContextCompat.getColor(ctx, R.color.grey_mid));
-        tvLiveRssi.setTextSize(12f);
-        layout.addView(tvLiveRssi);
-
-        ProgressBar progressBar = new ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
-        progressBar.setMax(100);
-        progressBar.setProgress(0);
-        progressBar.setVisibility(View.GONE);
-        layout.addView(progressBar);
-
-        Button btnCalibrate = new Button(ctx);
-        btnCalibrate.setText(R.string.calib_btn_calibrate);
-        btnCalibrate.setTextSize(13f);
-        btnCalibrate.setAllCaps(false);
-
-        btnCalibrate.setOnClickListener(v -> {
-            btnCalibrate.setEnabled(false);
-            btnCalibrate.setText(R.string.calib_btn_sampling);
-            progressBar.setVisibility(View.VISIBLE);
-            progressBar.setProgress(0);
-
-            final List<Integer> rssiSamples = new ArrayList<>();
-            final long sampleDurationMs = 5000;
-            final long sampleIntervalMs = 200;
-            final int totalSteps = (int) (sampleDurationMs / sampleIntervalMs);
-
-            final int[] step = {0};
-            sampleRunnable[0] = () -> {
-                P2BeaconSample s = beaconMap.get(compositeId);
-                if (s != null && s.getLastRawRssi() != 0) {
-                    rssiSamples.add(s.getLastRawRssi());
-                }
-                step[0]++;
-                progressBar.setProgress((step[0] * 100) / totalSteps);
-
-                if (step[0] < totalSteps) {
-                    handler.postDelayed(sampleRunnable[0], sampleIntervalMs);
-                } else {
-                    progressBar.setVisibility(View.GONE);
-                    if (!rssiSamples.isEmpty()) {
-                        int sum = 0;
-                        for (int r : rssiSamples) sum += r;
-                        calibratedTxPower[0] = (double) sum / rssiSamples.size();
-                        tvTxPower.setText(ctx.getString(
-                                R.string.calib_tx_power_calibrated, (int) calibratedTxPower[0]));
-                    }
-                    btnCalibrate.setEnabled(true);
-                    btnCalibrate.setText(R.string.calib_btn_calibrate);
-                }
-            };
-            handler.post(sampleRunnable[0]);
-        });
-        layout.addView(btnCalibrate);
-
         AlertDialog.Builder builder = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog)
                 .setTitle(ctx.getString(R.string.calib_title, major, minor))
                 .setView(layout)
@@ -184,8 +108,10 @@ public final class CalibrationDialog {
                     try { majorInt = Integer.parseInt(major); } catch (NumberFormatException ignored) {}
                     try { minorInt = Integer.parseInt(minor); } catch (NumberFormatException ignored) {}
 
+                    // TX power is no longer calibrated per beacon (global param);
+                    // store the default so the POJO stays valid — it is unused for TX.
                     Beacon beacon = new Beacon(uuid, majorInt, minorInt, newX, newY,
-                            calibratedTxPower[0], pathLossN);
+                            defaultTxPower, pathLossN);
                     calibrationStore.saveBeacon(beacon);
 
                     P2BeaconSample existing = beaconMap.get(compositeId);
@@ -206,10 +132,6 @@ public final class CalibrationDialog {
             });
         }
 
-        AlertDialog dialog = builder.create();
-        dialog.setOnDismissListener(d -> {
-            if (sampleRunnable[0] != null) handler.removeCallbacks(sampleRunnable[0]);
-        });
-        dialog.show();
+        builder.create().show();
     }
 }

@@ -89,7 +89,8 @@ public class P2ProximityClassifier {
             // tick by the engine); fall back to the windowed average otherwise.
             Double filt = s.getLastFilteredRssi();
             double rssiForRank = (filt != null) ? filt : avg;
-            double sig = rssiForRank - s.getEffectiveTxPower(cfg.txPower);
+            // Global TX power for every beacon (uniform -> cancels in the ranking).
+            double sig = rssiForRank - cfg.txPower;
             signals.put(e.getKey(), sig);
             if (sig > topSig) {
                 secondSig = topSig; second = top;

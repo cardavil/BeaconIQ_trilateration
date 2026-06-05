@@ -74,13 +74,11 @@ public class P2BeaconSampleTest {
     }
 
     @Test
-    public void txPowerOverrideTakesPrecedence() {
+    public void distanceUsesTheSuppliedGlobalTxPower() {
         P2BeaconSample s = sample();
         s.addRssi(-79);
-        s.setTxPowerOverride(-59);
-        assertThat(s.hasTxPowerOverride()).isTrue();
-        // Uses -59 (override), not the -69 passed in: 10^((-59 - -79)/20) = 10.
-        assertThat(s.advanceDistanceFilter(-69, 2.0, 1.0)).isCloseTo(10.0,
+        // Distance uses the supplied (global) txPwr -59: 10^((-59 - -79)/20) = 10.
+        assertThat(s.advanceDistanceFilter(-59, 2.0, 1.0)).isCloseTo(10.0,
                 org.assertj.core.data.Offset.offset(1e-9));
     }
 }

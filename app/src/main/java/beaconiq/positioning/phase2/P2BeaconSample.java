@@ -42,8 +42,6 @@ public class P2BeaconSample {
         this.lastSeen = System.currentTimeMillis();
     }
 
-    private double txPowerOverride = Double.NaN;
-
     private int lastRawRssi;
 
     public void addRssi(double rssi) {
@@ -81,14 +79,6 @@ public class P2BeaconSample {
     public double getX() { return x; }
     public double getY() { return y; }
     public void setCoordinates(double x, double y) { this.x = x; this.y = y; }
-    public void setTxPowerOverride(double txPower) { this.txPowerOverride = txPower; }
-    public boolean hasTxPowerOverride() { return !Double.isNaN(txPowerOverride); }
-    public double getTxPowerOverride() { return txPowerOverride; }
-
-    /** Calibrated TX power if set, otherwise the supplied default. */
-    public double getEffectiveTxPower(double defaultTxPower) {
-        return hasTxPowerOverride() ? txPowerOverride : defaultTxPower;
-    }
 
     /**
      * Advances the RSSI Kalman filter by one step from the current windowed RSSI
@@ -117,13 +107,13 @@ public class P2BeaconSample {
      * RSSI average and returns the new filtered distance (null if no RSSI yet).
      *
      * MUST be called exactly once per evaluation tick. Readers that only need the
-     * current value (recording, WCL weights, canvas) use {@link #getLastFilteredDistance()}.
+     * current value (recording, solver, canvas) use {@link #getLastFilteredDistance()}.
+     * {@code txPwr} is the global TX power for all beacons (no per-beacon override).
      */
     public Double advanceDistanceFilter(double txPwr, double n, double scale) {
         Double avgRssi = getAverageRssi();
         if (avgRssi == null) return null;
-        double effectiveTxPwr = hasTxPowerOverride() ? txPowerOverride : txPwr;
-        double rawDistance = Math.pow(10.0, (effectiveTxPwr - avgRssi) / (10.0 * n));
+        double rawDistance = Math.pow(10.0, (txPwr - avgRssi) / (10.0 * n));
         double scaledDistance = rawDistance * scale;
         return distanceFilter.update(scaledDistance);
     }
