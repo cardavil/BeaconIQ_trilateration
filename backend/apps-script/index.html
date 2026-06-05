@@ -5,18 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BeaconIQ Console</title>
   <?!= include("css_styles") ?>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 </head>
 <body>
 
   <div class="page-header">
     <h2>BeaconIQ <span class="subtitle">Test Console</span></h2>
+    <div class="tab-bar">
+      <button class="tab active" id="tabbtn-sessions" onclick="switchTab('sessions')">Sessions</button>
+      <button class="tab" id="tabbtn-analytics" onclick="switchTab('analytics')">Analytics</button>
+    </div>
   </div>
 
   <div id="tab-sessions">
     <?!= include("components_sessions") ?>
+    <div id="sheet-links" class="sheet-links"></div>
   </div>
 
-  <div id="sheet-links" class="sheet-links"></div>
+  <div id="tab-analytics" style="display:none">
+    <?!= include("components_analytics") ?>
+  </div>
 
   <?!= include("js_main") ?>
 

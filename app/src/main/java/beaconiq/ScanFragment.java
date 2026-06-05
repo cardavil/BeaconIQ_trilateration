@@ -76,7 +76,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
     private EditText editTxPower, editPathLoss, editRssiThreshold;
     private EditText editKalmanQ, editKalmanR, editRssiBuffer, editRssiWindow;
     private EditText editScaleFactor, editBeaconTimeout, editEvalInterval;
-    private EditText editWclG, editHysteresis, editDwell, editConfidence, editCooldown, editMinSamples;
+    private EditText editPosKalmanQ, editPosKalmanR, editHysteresis, editDwell, editConfidence, editCooldown, editMinSamples;
     private Button btnModeProximity, btnModeTrilateration;
     private View trilaterationSection, proximitySection;
     private DeviceListAdapter adapter;
@@ -149,7 +149,8 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         editScaleFactor = view.findViewById(R.id.edit_scale_factor);
         editBeaconTimeout = view.findViewById(R.id.edit_beacon_timeout);
         editEvalInterval = view.findViewById(R.id.edit_eval_interval);
-        editWclG = view.findViewById(R.id.edit_wcl_g);
+        editPosKalmanQ = view.findViewById(R.id.edit_pos_kalman_q);
+        editPosKalmanR = view.findViewById(R.id.edit_pos_kalman_r);
         editHysteresis = view.findViewById(R.id.edit_hysteresis_margin);
         editDwell = view.findViewById(R.id.edit_dwell);
         editConfidence = view.findViewById(R.id.edit_confidence);
@@ -267,6 +268,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             beaconCardAdapter.updateItems(Collections.emptyList());
         } else {
             applyAllParameters();
+            engine.setPositionKalman(config.posKalmanQ, config.posKalmanR);
             bleScanner.startScan();
             scanButton.setText("Stop Scan");
             scanButton.setBackgroundTintList(ColorStateList.valueOf(
@@ -303,7 +305,8 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             editScaleFactor.setText(String.format(Locale.US, "%.1f", config.scaleFactor));
             editBeaconTimeout.setText(String.valueOf(config.beaconTimeoutMs));
             editEvalInterval.setText(String.valueOf(config.evalIntervalMs));
-            editWclG.setText(String.format(Locale.US, "%.1f", config.wclG));
+            editPosKalmanQ.setText(String.format(Locale.US, "%.3f", config.posKalmanQ));
+            editPosKalmanR.setText(String.format(Locale.US, "%.3f", config.posKalmanR));
             editHysteresis.setText(String.format(Locale.US, "%.1f", config.hysteresisMarginDb));
             editDwell.setText(String.valueOf(config.dwellMs));
             editConfidence.setText(String.format(Locale.US, "%.2f", config.confidenceThreshold));
@@ -325,7 +328,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             updateBeaconCards(zr.activeZone);   // highlight the active zone card
             showProximityStatus(zr);
         } else {
-            double[] position = engine.estimatePosition(config.wclG);
+            double[] position = engine.estimatePosition();
             String closestKey = position != null ? engine.closestTo(position) : null;
             updateCalibratedKeys();
             exploreCanvas.updateP2(engine.snapshot(), position, closestKey);
@@ -387,6 +390,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         scanButton.setEnabled(true);
         if (wasScanning) {
             applyAllParameters();
+            engine.setPositionKalman(config.posKalmanQ, config.posKalmanR);
             bleScanner.startScan();
             scanButton.setText("Stop Scan");
             scanButton.setBackgroundTintList(ColorStateList.valueOf(
@@ -555,7 +559,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         EditText[] allFields = {editTxPower, editPathLoss, editRssiThreshold,
                 editKalmanQ, editKalmanR, editRssiBuffer, editRssiWindow,
                 editScaleFactor, editBeaconTimeout, editEvalInterval,
-                editWclG, editHysteresis, editDwell, editConfidence,
+                editPosKalmanQ, editPosKalmanR, editHysteresis, editDwell, editConfidence,
                 editCooldown, editMinSamples};
         for (EditText et : allFields) {
             et.setOnFocusChangeListener(paramFocusListener);
@@ -583,8 +587,10 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
                 P2ModelConfig.MIN_BEACON_TIMEOUT_MS, P2ModelConfig.MAX_BEACON_TIMEOUT_MS);
         config.evalIntervalMs = readInt(editEvalInterval, (int) P2ModelConfig.DEF_EVAL_INTERVAL_MS,
                 P2ModelConfig.MIN_EVAL_INTERVAL_MS, P2ModelConfig.MAX_EVAL_INTERVAL_MS);
-        config.wclG = readDouble(editWclG, P2ModelConfig.DEF_WCL_G,
-                P2ModelConfig.MIN_WCL_G, P2ModelConfig.MAX_WCL_G);
+        config.posKalmanQ = readDouble(editPosKalmanQ, P2ModelConfig.DEF_POS_KALMAN_Q,
+                P2ModelConfig.MIN_POS_KALMAN_Q, P2ModelConfig.MAX_POS_KALMAN_Q);
+        config.posKalmanR = readDouble(editPosKalmanR, P2ModelConfig.DEF_POS_KALMAN_R,
+                P2ModelConfig.MIN_POS_KALMAN_R, P2ModelConfig.MAX_POS_KALMAN_R);
         config.hysteresisMarginDb = readDouble(editHysteresis, P2ModelConfig.DEF_HYSTERESIS_MARGIN_DB,
                 P2ModelConfig.MIN_HYSTERESIS_MARGIN_DB, P2ModelConfig.MAX_HYSTERESIS_MARGIN_DB);
         config.dwellMs = readInt(editDwell, (int) P2ModelConfig.DEF_DWELL_MS,

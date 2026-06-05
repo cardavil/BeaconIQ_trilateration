@@ -8,6 +8,19 @@ window.addEventListener('DOMContentLoaded', function() {
   loadSheetLinks();
 });
 
+// Toggle between the Sessions list and the live EDA Analytics page.
+var _anLoaded = false;        // analytics fetched at least once (lazy load)
+var _anCharts = {};           // Chart.js instances, keyed by canvas id
+
+function switchTab(name) {
+  var isSessions = name === 'sessions';
+  document.getElementById('tab-sessions').style.display  = isSessions ? '' : 'none';
+  document.getElementById('tab-analytics').style.display = isSessions ? 'none' : '';
+  document.getElementById('tabbtn-sessions').classList.toggle('active', isSessions);
+  document.getElementById('tabbtn-analytics').classList.toggle('active', !isSessions);
+  if (!isSessions && !_anLoaded) loadAnalytics(false);
+}
+
 // ── HELPERS ─────────────────────────────────────────────────
 
 function escapeHtml(s) {
@@ -113,5 +126,176 @@ function renderSheetLinks(links) {
     }
   }
   container.innerHTML = parts.join('<span class="sep">&middot;</span>');
+}
+
+// ── ANALYTICS (live EDA) ─────────────────────────────────────
+var AN_TEAL = '#00838f', AN_TEAL2 = '#26c6da', AN_WARN = '#ef6c00', AN_GREY = '#90a4ae';
+
+function loadAnalytics(force) {
+  _anLoaded = true;
+  setStatus('an-status', 'Computing analytics from the live sheets…');
+  var btn = document.getElementById('an-refresh'); if (btn) btn.disabled = true;
+  google.script.run
+    .withSuccessHandler(function (d) { if (btn) btn.disabled = false; renderAnalytics(d); })
+    .withFailureHandler(function (e) {
+      if (btn) btn.disabled = false;
+      setStatus('an-status', 'Error: ' + (e && e.message ? e.message : e), 'err');
+    })
+    .api_getAnalytics(!!force);
+}
+
+function renderAnalytics(d) {
+  if (!d || !d.meta) { setStatus('an-status', 'No data returned', 'err'); return; }
+  setStatus('an-status', '');
+  var when = document.getElementById('an-when');
+  if (when) when.textContent = 'Computed at ' + d.meta.generated_at + ' · ' +
+    d.meta.n_sessions + ' sessions · ' + Number(d.meta.n_readings).toLocaleString() + ' readings';
+  if (typeof Chart === 'undefined')
+    setStatus('an-status', 'Charts library failed to load (tables still shown).', 'err');
+
+  var R = d.readings || {}, S = d.sessions || {};
+  var px = R.proximity || {}, k = R.kalman || {};
+  var rssi = (R.describe && R.describe.rssi_raw) || {};
+  anCards([
+    ['Sessions', d.meta.n_sessions],
+    ['Readings', Number(d.meta.n_readings).toLocaleString()],
+    ['RSSI mean (dBm)', fmtN(rssi.mean)],
+    ['RSSI σ (dBm)', fmtN(rssi.std)],
+    ['Kalman σ↓ (dist)', fmtN(k.mean_reduction_pct) + '%'],
+    ['Proximity acc.', px.accuracy != null ? (px.accuracy * 100).toFixed(1) + '%' : '—'],
+    ['Prox. eval reads', Number(px.n || 0).toLocaleString()],
+    ['iBeacon hit-rate', fmtN(S.hit_rate_pct && S.hit_rate_pct.median) + '%']
+  ]);
+
+  anBar('an-mode', S.by_mode, AN_TEAL);
+  anBar('an-move', S.by_movement, AN_TEAL2);
+  anBar('an-phone', S.by_phone, AN_GREY);
+  anScatter('an-coverage', (S.coverage || []).map(function (c) { return { x: c.scans, y: c.hits }; }),
+    'total_scan_results', 'ibeacon_hits', AN_TEAL);
+  anHist('an-hitrate', (S.coverage || []).map(function (c) { return c.rate * 100; }), 0, 100, 5, 'hit rate (%)', AN_TEAL2);
+  anBarBins('an-rssi', R.rssi_hist || [], 'rssi_raw (dBm)', AN_TEAL);
+  anKalman('an-kalman', k.scatter || []);
+  anAccConf('an-accconf', px.curve || []);
+
+  anConfusion('an-confusion', px.labels || [], px.matrix || []);
+  anCorr('an-correlation', (R.correlation && R.correlation.labels) || [], (R.correlation && R.correlation.matrix) || []);
+  anDescribe('an-desc-readings', R.describe || {});
+  anDescribe('an-desc-sessions', S.describe || {});
+}
+
+function fmtN(v) { return (v == null || isNaN(v)) ? '—' : Number(v).toFixed(1); }
+function anCards(pairs) {
+  var el = document.getElementById('an-cards'); if (!el) return;
+  el.innerHTML = pairs.map(function (p) {
+    return '<div class="biq-stat"><div class="biq-stat-v">' + escapeHtml(String(p[1])) +
+      '</div><div class="biq-stat-k">' + escapeHtml(p[0]) + '</div></div>';
+  }).join('');
+}
+function _destroy(id) { if (_anCharts[id]) { _anCharts[id].destroy(); delete _anCharts[id]; } }
+function _ctx(id) {
+  if (typeof Chart === 'undefined') return null;
+  var c = document.getElementById(id); return c ? c.getContext('2d') : null;
+}
+function anBar(id, obj, color) {
+  var ctx = _ctx(id); if (!ctx) return; _destroy(id);
+  var labels = Object.keys(obj || {}), data = labels.map(function (l) { return obj[l]; });
+  _anCharts[id] = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ data: data, backgroundColor: color }] },
+    options: { maintainAspectRatio: true, aspectRatio: 1.5, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: { size: 10 } } }, y: { beginAtZero: true, title: { display: true, text: 'count' } } } } });
+}
+function anBarBins(id, bins, xlabel, color) {
+  var ctx = _ctx(id); if (!ctx) return; _destroy(id);
+  var labels = bins.map(function (b) { return b.x0; }), data = bins.map(function (b) { return b.c; });
+  _anCharts[id] = new Chart(ctx, { type: 'bar', data: { labels: labels, datasets: [{ data: data, backgroundColor: color }] },
+    options: { maintainAspectRatio: true, aspectRatio: 1.7, plugins: { legend: { display: false } },
+      scales: { x: { title: { display: true, text: xlabel }, ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true, title: { display: true, text: 'count' } } } } });
+}
+function anHist(id, vals, lo, hi, step, xlabel, color) {
+  var n = Math.round((hi - lo) / step), bins = [];
+  for (var i = 0; i < n; i++) bins.push({ x0: lo + i * step, c: 0 });
+  vals.forEach(function (v) { var idx = Math.floor((v - lo) / step); if (idx >= 0 && idx < n) bins[idx].c++; });
+  anBarBins(id, bins, xlabel, color);
+}
+function anScatter(id, pts, xlabel, ylabel, color) {
+  var ctx = _ctx(id); if (!ctx) return; _destroy(id);
+  _anCharts[id] = new Chart(ctx, { type: 'scatter', data: { datasets: [{ data: pts, backgroundColor: color, pointRadius: 3 }] },
+    options: { maintainAspectRatio: true, aspectRatio: 1.6, plugins: { legend: { display: false } },
+      scales: { x: { title: { display: true, text: xlabel } }, y: { title: { display: true, text: ylabel } } } } });
+}
+function anKalman(id, scatter) {
+  var ctx = _ctx(id); if (!ctx) return; _destroy(id);
+  var pts = scatter.map(function (s) { return { x: s.std_raw, y: s.std_filt }; });
+  var m = 0; pts.forEach(function (p) { m = Math.max(m, p.x, p.y); });
+  _anCharts[id] = new Chart(ctx, { data: { datasets: [
+      { type: 'scatter', label: 'beacon', data: pts, backgroundColor: AN_WARN, pointRadius: 4 },
+      { type: 'line', label: 'y=x', data: [{ x: 0, y: 0 }, { x: m, y: m }], borderColor: AN_GREY, borderDash: [6, 4], pointRadius: 0, borderWidth: 1 }
+    ] },
+    options: { maintainAspectRatio: true, aspectRatio: 1.6,
+      scales: { x: { title: { display: true, text: 'σ raw distance' } }, y: { title: { display: true, text: 'σ filtered distance' } } } } });
+}
+function anAccConf(id, curve) {
+  var ctx = _ctx(id); if (!ctx) return; _destroy(id);
+  _anCharts[id] = new Chart(ctx, { data: { labels: curve.map(function (c) { return c.t; }), datasets: [
+      { type: 'line', label: 'accuracy (%)', data: curve.map(function (c) { return c.acc; }), borderColor: AN_TEAL, backgroundColor: AN_TEAL, tension: .2, spanGaps: true },
+      { type: 'line', label: 'coverage (%)', data: curve.map(function (c) { return c.coverage; }), borderColor: AN_WARN, backgroundColor: AN_WARN, tension: .2 }
+    ] },
+    options: { maintainAspectRatio: true, aspectRatio: 2.4,
+      scales: { x: { title: { display: true, text: 'confidence threshold' } }, y: { beginAtZero: true, max: 100, title: { display: true, text: '%' } } } } });
+}
+function _heatTeal(t) {
+  var r = Math.round(255 - 255 * t), g = Math.round(255 - 124 * t), b = Math.round(255 - 112 * t);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+function anConfusion(id, labels, matrix) {
+  var el = document.getElementById(id); if (!el) return;
+  if (!labels.length) { el.innerHTML = '<p class="loading-msg">No proximity ground-truth recorded yet.</p>'; return; }
+  var max = 0; matrix.forEach(function (row) { row.forEach(function (v) { max = Math.max(max, v); }); });
+  var h = '<table class="biq-heat"><tr><th class="lbl">gt \\ pred</th>';
+  labels.forEach(function (l) { h += '<th>' + escapeHtml(l) + '</th>'; }); h += '</tr>';
+  matrix.forEach(function (row, i) {
+    h += '<tr><td class="lbl">' + escapeHtml(labels[i]) + '</td>';
+    row.forEach(function (v) {
+      var t = max ? v / max : 0;
+      h += '<td style="background:' + _heatTeal(t) + ';color:' + (t > 0.55 ? '#fff' : '#000') + '">' + v + '</td>';
+    });
+    h += '</tr>';
+  });
+  el.innerHTML = h + '</table>';
+}
+function anCorr(id, labels, matrix) {
+  var el = document.getElementById(id); if (!el) return;
+  if (!labels.length) { el.innerHTML = '<p class="loading-msg">No data.</p>'; return; }
+  var h = '<table class="biq-heat"><tr><th class="lbl"></th>';
+  labels.forEach(function (l) { h += '<th>' + escapeHtml(l) + '</th>'; }); h += '</tr>';
+  matrix.forEach(function (row, i) {
+    h += '<tr><td class="lbl">' + escapeHtml(labels[i]) + '</td>';
+    row.forEach(function (v) {
+      var bg, col, txt;
+      if (v == null) { bg = '#eee'; col = '#999'; txt = '—'; }
+      else {
+        var r, g, b;
+        if (v >= 0) { r = Math.round(255 - 255 * v); g = Math.round(255 - 100 * v); b = 255; }
+        else { r = 255; g = Math.round(255 + 150 * v); b = Math.round(255 + 255 * v); }
+        bg = 'rgb(' + r + ',' + g + ',' + b + ')'; col = Math.abs(v) > 0.6 ? '#fff' : '#000';
+        txt = Number(v).toFixed(2);
+      }
+      h += '<td style="background:' + bg + ';color:' + col + '">' + txt + '</td>';
+    });
+    h += '</tr>';
+  });
+  el.innerHTML = h + '</table>';
+}
+function anDescribe(id, obj) {
+  var el = document.getElementById(id); if (!el) return;
+  var vars = Object.keys(obj || {}); if (!vars.length) { el.innerHTML = '<p class="loading-msg">No data.</p>'; return; }
+  var stats = ['count', 'mean', 'std', 'min', 'p25', 'p50', 'p75', 'max'];
+  var h = '<table class="biq-table"><thead><tr><th>variable</th>';
+  stats.forEach(function (s) { h += '<th>' + s + '</th>'; }); h += '</tr></thead><tbody>';
+  vars.forEach(function (v) {
+    h += '<tr><td class="mono">' + escapeHtml(v) + '</td>';
+    stats.forEach(function (s) { var x = obj[v][s]; h += '<td>' + (x == null ? '—' : x) + '</td>'; });
+    h += '</tr>';
+  });
+  el.innerHTML = h + '</tbody></table>';
 }
 </script>

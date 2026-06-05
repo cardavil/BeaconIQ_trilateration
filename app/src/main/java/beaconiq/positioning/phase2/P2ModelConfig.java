@@ -28,7 +28,8 @@ public class P2ModelConfig {
     public static final String KEY_EVAL_INTERVAL_MS = "debug_eval_interval_ms";
     // Dual-mode (V2)
     public static final String KEY_MODE = "debug_mode";
-    public static final String KEY_WCL_G = "debug_wcl_g";
+    public static final String KEY_POS_KALMAN_Q = "debug_pos_kalman_q";
+    public static final String KEY_POS_KALMAN_R = "debug_pos_kalman_r";
     public static final String KEY_HYSTERESIS_MARGIN_DB = "debug_hysteresis_margin_db";
     public static final String KEY_DWELL_MS = "debug_dwell_ms";
     public static final String KEY_CONFIDENCE_THRESHOLD = "debug_confidence_threshold";
@@ -51,8 +52,9 @@ public class P2ModelConfig {
     public static final int MODE_PROXIMITY = 0;
     public static final int MODE_TRILATERATION = 1;
     public static final int DEF_MODE = MODE_PROXIMITY;
-    public static final double DEF_WCL_G = 2.0;
-    public static final double DEF_HYSTERESIS_MARGIN_DB = 6.0;
+    public static final double DEF_POS_KALMAN_Q = 0.05;
+    public static final double DEF_POS_KALMAN_R = 0.5;
+    public static final double DEF_HYSTERESIS_MARGIN_DB = 8.0;
     public static final long DEF_DWELL_MS = 1500;
     public static final double DEF_CONFIDENCE_THRESHOLD = 0.4;
     public static final long DEF_TRIGGER_COOLDOWN_MS = 8000;
@@ -69,7 +71,8 @@ public class P2ModelConfig {
     public static final double MIN_SCALE_FACTOR = 0.1, MAX_SCALE_FACTOR = 50.0;
     public static final int MIN_BEACON_TIMEOUT_MS = 1000, MAX_BEACON_TIMEOUT_MS = 30000;
     public static final int MIN_EVAL_INTERVAL_MS = 500, MAX_EVAL_INTERVAL_MS = 30000;
-    public static final double MIN_WCL_G = 1.0, MAX_WCL_G = 6.0;
+    public static final double MIN_POS_KALMAN_Q = 0.001, MAX_POS_KALMAN_Q = 1.0;
+    public static final double MIN_POS_KALMAN_R = 0.001, MAX_POS_KALMAN_R = 5.0;
     public static final double MIN_HYSTERESIS_MARGIN_DB = 0.0, MAX_HYSTERESIS_MARGIN_DB = 20.0;
     public static final int MIN_DWELL_MS = 0, MAX_DWELL_MS = 10000;
     public static final double MIN_CONFIDENCE_THRESHOLD = 0.0, MAX_CONFIDENCE_THRESHOLD = 1.0;
@@ -89,7 +92,8 @@ public class P2ModelConfig {
     public long evalIntervalMs = DEF_EVAL_INTERVAL_MS;
     // Dual-mode (V2)
     public int mode = DEF_MODE;
-    public double wclG = DEF_WCL_G;
+    public double posKalmanQ = DEF_POS_KALMAN_Q;
+    public double posKalmanR = DEF_POS_KALMAN_R;
     public double hysteresisMarginDb = DEF_HYSTERESIS_MARGIN_DB;
     public long dwellMs = DEF_DWELL_MS;
     public double confidenceThreshold = DEF_CONFIDENCE_THRESHOLD;
@@ -110,7 +114,8 @@ public class P2ModelConfig {
         c.beaconTimeoutMs = p.getInt(KEY_BEACON_TIMEOUT_MS, (int) DEF_BEACON_TIMEOUT_MS);
         c.evalIntervalMs = p.getInt(KEY_EVAL_INTERVAL_MS, (int) DEF_EVAL_INTERVAL_MS);
         c.mode = p.getInt(KEY_MODE, DEF_MODE);
-        c.wclG = p.getFloat(KEY_WCL_G, (float) DEF_WCL_G);
+        c.posKalmanQ = p.getFloat(KEY_POS_KALMAN_Q, (float) DEF_POS_KALMAN_Q);
+        c.posKalmanR = p.getFloat(KEY_POS_KALMAN_R, (float) DEF_POS_KALMAN_R);
         c.hysteresisMarginDb = p.getFloat(KEY_HYSTERESIS_MARGIN_DB, (float) DEF_HYSTERESIS_MARGIN_DB);
         c.dwellMs = p.getInt(KEY_DWELL_MS, (int) DEF_DWELL_MS);
         c.confidenceThreshold = p.getFloat(KEY_CONFIDENCE_THRESHOLD, (float) DEF_CONFIDENCE_THRESHOLD);
@@ -133,7 +138,8 @@ public class P2ModelConfig {
                 .putInt(KEY_BEACON_TIMEOUT_MS, (int) beaconTimeoutMs)
                 .putInt(KEY_EVAL_INTERVAL_MS, (int) evalIntervalMs)
                 .putInt(KEY_MODE, mode)
-                .putFloat(KEY_WCL_G, (float) wclG)
+                .putFloat(KEY_POS_KALMAN_Q, (float) posKalmanQ)
+                .putFloat(KEY_POS_KALMAN_R, (float) posKalmanR)
                 .putFloat(KEY_HYSTERESIS_MARGIN_DB, (float) hysteresisMarginDb)
                 .putInt(KEY_DWELL_MS, (int) dwellMs)
                 .putFloat(KEY_CONFIDENCE_THRESHOLD, (float) confidenceThreshold)

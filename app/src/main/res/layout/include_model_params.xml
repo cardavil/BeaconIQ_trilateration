@@ -112,7 +112,7 @@
 
         <TextView
             style="@style/Widget.BeaconIQ.ParamLabel"
-            android:text="Scale Factor (0.1 – 50.0)" />
+            android:text="Scale Factor (0.1 – 50.0, scales radii)" />
 
         <EditText
             android:id="@+id/edit_scale_factor"
@@ -122,12 +122,22 @@
 
         <TextView
             style="@style/Widget.BeaconIQ.ParamLabel"
-            android:text="WCL Exponent g (1.0 – 6.0)" />
+            android:text="Pos Kalman Q (0.001 – 1.0)" />
 
         <EditText
-            android:id="@+id/edit_wcl_g"
+            android:id="@+id/edit_pos_kalman_q"
             style="@style/Widget.BeaconIQ.ParamInput"
-            android:hint="2.0"
+            android:hint="0.05"
+            android:inputType="numberDecimal" />
+
+        <TextView
+            style="@style/Widget.BeaconIQ.ParamLabel"
+            android:text="Pos Kalman R (0.001 – 5.0)" />
+
+        <EditText
+            android:id="@+id/edit_pos_kalman_r"
+            style="@style/Widget.BeaconIQ.ParamInput"
+            android:hint="0.5"
             android:inputType="numberDecimal" />
     </LinearLayout>
 
@@ -146,7 +156,7 @@
         <EditText
             android:id="@+id/edit_hysteresis_margin"
             style="@style/Widget.BeaconIQ.ParamInput"
-            android:hint="6.0"
+            android:hint="8.0"
             android:inputType="numberDecimal" />
 
         <TextView

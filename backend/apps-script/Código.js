@@ -8,7 +8,7 @@ function doPost(e) {
     var data = JSON.parse(e.postData.contents);
 
     if (!validateToken(data.auth)) {
-      return _jsonResponse({ error: true, message: 'Unauthorized' }, 401);
+      return _jsonResponse({ status: 'error', message: 'Unauthorized' });
     }
 
     var action = data.action || '';
@@ -23,11 +23,11 @@ function doPost(e) {
       return _jsonResponse({ sessions: sessions });
     }
 
-    return _jsonResponse({ error: true, message: 'Unknown action: ' + action }, 400);
+    return _jsonResponse({ status: 'error', message: 'Unknown action: ' + action });
 
   } catch (err) {
     Logger.log('[doPost] ERROR: ' + err.message + '\n' + (err.stack || ''));
-    return _jsonResponse({ error: true, message: err.message }, 500);
+    return _jsonResponse({ status: 'error', message: err.message });
   }
 }
 
@@ -43,7 +43,7 @@ function include(file) {
   return HtmlService.createHtmlOutputFromFile(file).getContent();
 }
 
-function _jsonResponse(obj, code) {
+function _jsonResponse(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
@@ -67,8 +67,8 @@ function api_getSessions() {
       analyst:          r[3] || '',
       duration_sec:     r[4] || 0,
       room:             r[6] || '',
-      beacons_detected: r[13] || 0,
-      ibeacon_hits:     r[15] || 0
+      beacons_detected: r[23] || 0,
+      ibeacon_hits:     r[25] || 0
     });
   }
   return rows;

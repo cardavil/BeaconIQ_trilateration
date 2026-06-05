@@ -90,17 +90,26 @@ public class P2BeaconSample {
         return hasTxPowerOverride() ? txPowerOverride : defaultTxPower;
     }
 
-    public void copyRssiFrom(P2BeaconSample other) {
-        rssiBuffer.clear();
-        rssiBuffer.addAll(other.rssiBuffer);
-        lastRawRssi = other.lastRawRssi;
-        lastSeen = other.lastSeen;
-    }
-
-    public Double getKalmanFilteredRssi() {
+    /**
+     * Advances the RSSI Kalman filter by one step from the current windowed RSSI
+     * average and returns the new filtered value (null if no RSSI yet).
+     *
+     * Like {@link #advanceDistanceFilter}, this MUST be called exactly once per
+     * evaluation tick. Per-reading logging reads {@link #getLastFilteredRssi()}
+     * (non-mutating) so it does not perturb the filter.
+     */
+    public Double advanceRssiFilter() {
         Double avgRssi = getAverageRssi();
         if (avgRssi == null) return null;
         return rssiFilter.update(avgRssi);
+    }
+
+    /**
+     * The most recent Kalman-filtered RSSI the model produced, without advancing
+     * the filter. Null before the first evaluation tick.
+     */
+    public Double getLastFilteredRssi() {
+        return rssiFilter.current();
     }
 
     /**

@@ -10,13 +10,13 @@ function writeRawScans(sessionId, rawScans) {
     var s = rawScans[i];
     rows.push([
       sessionId,
-      s.timestamp_ms    || '',
-      s.device_address  || '',
-      s.company_id      || '',
-      s.rssi            || '',
+      _v(s.timestamp_ms),
+      _v(s.device_address),
+      _v(s.company_id),
+      _v(s.rssi),
       s.was_ibeacon === true ? 'TRUE' : 'FALSE',
-      s.data_hex        || '',
-      s.reject_reason   || ''
+      _v(s.data_hex),
+      _v(s.reject_reason)
     ]);
   }
 

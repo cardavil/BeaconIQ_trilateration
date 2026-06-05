@@ -59,6 +59,21 @@ public class P2BeaconSampleTest {
     }
 
     @Test
+    public void rssiFilterAdvancesOnceAndReadsAreNonMutating() {
+        P2BeaconSample s = sample();
+        assertThat(s.getLastFilteredRssi()).isNull();   // before first tick
+        s.addRssi(-60);
+        // First advance returns the measurement unchanged (filter seeds to z).
+        assertThat(s.advanceRssiFilter()).isCloseTo(-60.0,
+                org.assertj.core.data.Offset.offset(1e-9));
+        double first = s.getLastFilteredRssi();
+        // Many non-mutating reads must not change the filtered value.
+        for (int i = 0; i < 10; i++) {
+            assertThat(s.getLastFilteredRssi()).isEqualTo(first);
+        }
+    }
+
+    @Test
     public void txPowerOverrideTakesPrecedence() {
         P2BeaconSample s = sample();
         s.addRssi(-79);

@@ -25,8 +25,20 @@ public class P2PositioningEngine {
     private final P2ProximityClassifier proximityClassifier = new P2ProximityClassifier();
     private int autoPositionCounter = 0;
 
+    // 2-D Kalman that smooths the trilateration (x,y) across ticks.
+    private double posKalmanQ = 0.05;
+    private double posKalmanR = 0.5;
+    private P2KalmanFilter2D positionFilter = new P2KalmanFilter2D(posKalmanQ, posKalmanR);
+
     public P2PositioningEngine(CalibrationStore calibrationStore) {
         this.calibrationStore = calibrationStore;
+    }
+
+    /** Sets the position-Kalman q/r and resets the filter. Call at scan/record start. */
+    public void setPositionKalman(double q, double r) {
+        this.posKalmanQ = q;
+        this.posKalmanR = r;
+        this.positionFilter = new P2KalmanFilter2D(q, r);
     }
 
     /** Live map — used for canvas snapshots, calibration UI, and status lines. */
@@ -42,6 +54,7 @@ public class P2PositioningEngine {
     public void clear() {
         beacons.clear();
         proximityClassifier.reset();
+        positionFilter = new P2KalmanFilter2D(posKalmanQ, posKalmanR);
     }
 
     /**
@@ -102,12 +115,13 @@ public class P2PositioningEngine {
      * and returns how many beacons are currently live. This is the single point
      * where the distance filter is stepped; the solver and recording then read
      * the resulting value non-mutatingly. Call once per evaluation tick before
-     * {@link #estimatePosition(int)}.
+     * {@link #estimatePosition()}.
      */
     public int updateDistances(int txPower, double pathLossN, double scaleFactor) {
         int count = 0;
         for (P2BeaconSample b : beacons.values()) {
             b.advanceDistanceFilter(txPower, pathLossN, scaleFactor);
+            b.advanceRssiFilter();
             if (b.isLive()) count++;
         }
         return count;
@@ -123,11 +137,15 @@ public class P2PositioningEngine {
     }
 
     /**
-     * Trilateration mode: WCL (x,y) with weighting exponent g, on the distances
-     * last produced by {@link #updateDistances(int, double, double)}.
+     * Trilateration mode: real least-squares multilateration (x,y) on the
+     * distances last produced by {@link #updateDistances(int, double, double)},
+     * smoothed by the 2-D position Kalman. Returns null with fewer than 3 usable
+     * beacons. Advances the position filter once per call — call once per tick.
      */
-    public double[] estimatePosition(double g) {
-        return P2TrilaterationJavaSolver.estimatePositionWCL(beacons.values(), g);
+    public double[] estimatePosition() {
+        double[] raw = P2TrilaterationJavaSolver.estimatePosition(beacons.values());
+        if (raw == null) return null;
+        return positionFilter.update(raw[0], raw[1]);
     }
 
     /** Composite id of the beacon nearest to the given estimate, or null. */

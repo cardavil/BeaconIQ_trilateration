@@ -96,7 +96,7 @@ public class P2PositioningEngineTest {
         }
 
         // The reads that used to double/triple-step the filter must now be pure.
-        engine.estimatePosition(2.0);   // WCL
+        engine.estimatePosition();   // WCL
         engine.countActive();
         engine.countActive();
 
@@ -111,7 +111,7 @@ public class P2PositioningEngineTest {
         ingest(2, 1, -59);
         ingest(2, 2, -65);
         engine.updateDistances(-59, 2.0, 1.0);
-        assertThat(engine.estimatePosition(2.0)).isNull();
+        assertThat(engine.estimatePosition()).isNull();
     }
 
     @Test

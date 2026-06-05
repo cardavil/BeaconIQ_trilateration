@@ -92,7 +92,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
     private EditText editTxPower, editPathLoss, editRssiThreshold;
     private EditText editKalmanQ, editKalmanR, editRssiBuffer, editRssiWindow;
     private EditText editScaleFactor, editBeaconTimeout, editEvalInterval;
-    private EditText editWclG, editHysteresis, editDwell, editConfidence, editTriggerCooldown, editMinSamples;
+    private EditText editPosKalmanQ, editPosKalmanR, editHysteresis, editDwell, editConfidence, editTriggerCooldown, editMinSamples;
     private Spinner spinnerMovement, spinnerPhonePosition;
     private ChipGroup groupGroundTruth;
     // Clean zone values ("major,minor") parallel to the ground-truth spinner items.
@@ -191,7 +191,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
             engine.pruneStale(System.currentTimeMillis(), config.beaconTimeoutMs);
 
             engine.updateDistances(config.txPower, config.pathLossN, config.scaleFactor);
-            double[] position = engine.estimatePosition(config.wclG);
+            double[] position = engine.estimatePosition();
             String closestKey = position != null ? engine.closestTo(position) : null;
 
             updateCalibratedKeys();
@@ -290,7 +290,8 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         editScaleFactor = view.findViewById(R.id.edit_scale_factor);
         editBeaconTimeout = view.findViewById(R.id.edit_beacon_timeout);
         editEvalInterval = view.findViewById(R.id.edit_eval_interval);
-        editWclG = view.findViewById(R.id.edit_wcl_g);
+        editPosKalmanQ = view.findViewById(R.id.edit_pos_kalman_q);
+        editPosKalmanR = view.findViewById(R.id.edit_pos_kalman_r);
         editHysteresis = view.findViewById(R.id.edit_hysteresis_margin);
         editDwell = view.findViewById(R.id.edit_dwell);
         editConfidence = view.findViewById(R.id.edit_confidence);
@@ -364,7 +365,8 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
             editScaleFactor.setText("1.0");
             editBeaconTimeout.setText("4000");
             editEvalInterval.setText("3000");
-            editWclG.setText("2.0");
+            editPosKalmanQ.setText("0.050");
+            editPosKalmanR.setText("0.500");
             editHysteresis.setText("6.0");
             editDwell.setText("1500");
             editConfidence.setText("0.40");
@@ -429,7 +431,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         modelParamsSection.setVisibility(View.VISIBLE);
 
         tvKalmanStatus.setText("Kalman: ON (q=" + config.kalmanQ + ", r=" + config.kalmanR + ")");
-        tvSolverStatus.setText("Solver: WCL");
+        tvSolverStatus.setText("Solver: LSQ");
         tvEngineStatus.setText("Engine: direct solver");
         tvCalibrationStatus.setText("Calibrated: 0/0");
         btnCalibrate.setVisibility(View.VISIBLE);
@@ -451,7 +453,8 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         editScaleFactor.setText(String.format(Locale.US, "%.1f", config.scaleFactor));
         editBeaconTimeout.setText(String.valueOf(config.beaconTimeoutMs));
         editEvalInterval.setText(String.valueOf(config.evalIntervalMs));
-        editWclG.setText(String.format(Locale.US, "%.1f", config.wclG));
+        editPosKalmanQ.setText(String.format(Locale.US, "%.3f", config.posKalmanQ));
+        editPosKalmanR.setText(String.format(Locale.US, "%.3f", config.posKalmanR));
         editHysteresis.setText(String.format(Locale.US, "%.1f", config.hysteresisMarginDb));
         editDwell.setText(String.valueOf(config.dwellMs));
         editConfidence.setText(String.format(Locale.US, "%.2f", config.confidenceThreshold));
@@ -474,8 +477,10 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         config.scaleFactor = readDouble(editScaleFactor, DEFAULT_SCALE_FACTOR, 0.1, 50.0);
         config.beaconTimeoutMs = readInt(editBeaconTimeout, (int) DEFAULT_BEACON_TIMEOUT_MS, 1000, 30000);
         config.evalIntervalMs = readInt(editEvalInterval, (int) DEFAULT_MODEL_EVAL_INTERVAL_MS, 500, 30000);
-        config.wclG = readDouble(editWclG, P2ModelConfig.DEF_WCL_G,
-                P2ModelConfig.MIN_WCL_G, P2ModelConfig.MAX_WCL_G);
+        config.posKalmanQ = readDouble(editPosKalmanQ, P2ModelConfig.DEF_POS_KALMAN_Q,
+                P2ModelConfig.MIN_POS_KALMAN_Q, P2ModelConfig.MAX_POS_KALMAN_Q);
+        config.posKalmanR = readDouble(editPosKalmanR, P2ModelConfig.DEF_POS_KALMAN_R,
+                P2ModelConfig.MIN_POS_KALMAN_R, P2ModelConfig.MAX_POS_KALMAN_R);
         config.hysteresisMarginDb = readDouble(editHysteresis, P2ModelConfig.DEF_HYSTERESIS_MARGIN_DB,
                 P2ModelConfig.MIN_HYSTERESIS_MARGIN_DB, P2ModelConfig.MAX_HYSTERESIS_MARGIN_DB);
         config.dwellMs = readInt(editDwell, (int) P2ModelConfig.DEF_DWELL_MS,
@@ -602,6 +607,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         lastZone = null;
 
         engine.clear();
+        engine.setPositionKalman(config.posKalmanQ, config.posKalmanR);
         btnCalibrate.setVisibility(View.GONE);
 
         formSection.setVisibility(View.GONE);
@@ -708,9 +714,10 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         session.put("scale_factor", config.scaleFactor);
         session.put("beacon_timeout_ms", config.beaconTimeoutMs);
         session.put("eval_interval_ms", config.evalIntervalMs);
-        session.put("solver_type", "WCL");
+        session.put("solver_type", "trilateration_lsq");
         session.put("mode", config.mode == P2ModelConfig.MODE_PROXIMITY ? "proximity" : "trilateration");
-        session.put("wcl_g", config.wclG);
+        session.put("pos_kalman_q", config.posKalmanQ);
+        session.put("pos_kalman_r", config.posKalmanR);
         session.put("hysteresis_margin_db", config.hysteresisMarginDb);
         session.put("dwell_ms", config.dwellMs);
         session.put("confidence_threshold", config.confidenceThreshold);
@@ -787,7 +794,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         tvBeaconCount.setText("Beacons: " + active + " / 3 required");
 
         tvKalmanStatus.setText("Kalman: ON (q=" + config.kalmanQ + ", r=" + config.kalmanR + ")");
-        tvSolverStatus.setText("Solver: WCL");
+        tvSolverStatus.setText("Solver: LSQ");
         if (lastZone != null && lastZone.activeZone != null) {
             tvEngineStatus.setText("Zone: " + P2BeaconIds.extractLabel(lastZone.activeZone)
                     + " (conf " + (int) Math.round(lastZone.confidence * 100) + "%)");
@@ -850,7 +857,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         reading.put("est_x", pos != null ? Math.round(pos[0] * 100.0) / 100.0 : "");
         reading.put("est_y", pos != null ? Math.round(pos[1] * 100.0) / 100.0 : "");
         reading.put("model_phase", "phase_2");
-        // Proximity-model outputs (logged in parallel with the WCL estimate).
+        // Proximity-model outputs (logged in parallel with the LSQ estimate).
         P2ProximityClassifier.ZoneResult z = lastZone;
         reading.put("active_zone",
                 z != null && z.activeZone != null ? P2BeaconIds.extractLabel(z.activeZone) : "");
@@ -916,7 +923,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
             evaluatePhaseTwo();
         }
 
-        // Proximity model runs in parallel with WCL; both are logged so the two
+        // Proximity model runs in parallel with LSQ trilateration; both are logged so the two
         // approaches can be compared offline from one recorded walk.
         lastZone = engine.classifyProximity(config, now);
 
@@ -991,11 +998,13 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
     private Double processP2Beacon(Beacon beacon, String compositeId) {
         engine.ingest(beacon, config.kalmanQ, config.kalmanR, config.rssiBufferSize, config.rssiTimeWindowMs);
         P2BeaconSample sample = engine.beacons().get(compositeId);
-        return sample != null ? sample.getKalmanFilteredRssi() : null;
+        // Non-mutating read; the RSSI filter is advanced once per tick in
+        // runModelEvaluation via engine.updateDistances (mirrors distance_m).
+        return sample != null ? sample.getLastFilteredRssi() : null;
     }
 
     private void evaluatePhaseTwo() {
-        estimatedPosition = engine.estimatePosition(config.wclG);
+        estimatedPosition = engine.estimatePosition();
 
         if (estimatedPosition != null) {
             modelState = "POSITIONING";
@@ -1030,8 +1039,13 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         config.scaleFactor = readDouble(editScaleFactor, DEFAULT_SCALE_FACTOR, 0.1, 50.0);
         config.beaconTimeoutMs = readInt(editBeaconTimeout, (int) DEFAULT_BEACON_TIMEOUT_MS, 1000, 30000);
         config.evalIntervalMs = readInt(editEvalInterval, (int) DEFAULT_MODEL_EVAL_INTERVAL_MS, 500, 30000);
+        config.posKalmanQ = readDouble(editPosKalmanQ, P2ModelConfig.DEF_POS_KALMAN_Q,
+                P2ModelConfig.MIN_POS_KALMAN_Q, P2ModelConfig.MAX_POS_KALMAN_Q);
+        config.posKalmanR = readDouble(editPosKalmanR, P2ModelConfig.DEF_POS_KALMAN_R,
+                P2ModelConfig.MIN_POS_KALMAN_R, P2ModelConfig.MAX_POS_KALMAN_R);
 
         engine.clear();
+        engine.setPositionKalman(config.posKalmanQ, config.posKalmanR);
         engine.resetAutoPositionCounter();
         positioningCanvas.clear();
 
@@ -1043,7 +1057,7 @@ public class PhaseTwoTestFragment extends Fragment implements BleScanner.ScanLis
         tvState.setText("State: CALIBRATING");
         tvBeaconCount.setText("Beacons: 0 / 3 required");
         tvKalmanStatus.setText("Kalman: ON (q=" + config.kalmanQ + ", r=" + config.kalmanR + ")");
-        tvSolverStatus.setText("Solver: WCL");
+        tvSolverStatus.setText("Solver: LSQ");
         tvEngineStatus.setText("Tap beacon dots to calibrate");
         updateCalibrationStatusLine();
 

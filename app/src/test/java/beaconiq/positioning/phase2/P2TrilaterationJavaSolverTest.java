@@ -10,92 +10,108 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Pure-JVM tests for the centroid / weighted-centroid solver and nearest lookup. */
+/**
+ * Pure-JVM tests for the real least-squares trilateration solver. They assert the
+ * properties that distinguish genuine lateration from the old weighted-centroid:
+ * it recovers a known point, can place the estimate OUTSIDE the beacon hull, and
+ * its result DEPENDS on the absolute distance scale.
+ */
 public class P2TrilaterationJavaSolverTest {
 
-    /** Builds a sample whose distance filter is primed to {@code rssi}. */
-    private static P2BeaconSample primed(String id, double x, double y, int rssi) {
+    /** Sample whose filtered distance is primed exactly to {@code d} meters.
+     *  With txPower=-59, n=2, scale=1: distance = 10^((-59 - rssi)/20); inverting,
+     *  rssi = -59 - 20*log10(d). The first Kalman step returns the measurement,
+     *  so getLastFilteredDistance() == d. */
+    private static P2BeaconSample atDistance(String id, double x, double y, double d) {
         P2BeaconSample s = new P2BeaconSample(id, x, y);
+        double rssi = -59.0 - 20.0 * Math.log10(d);
         s.addRssi(rssi);
         s.advanceDistanceFilter(-59, 2.0, 1.0);
         return s;
     }
 
-    @Test
-    public void wclIsPulledTowardTheCloserBeacon() {
-        List<P2BeaconSample> beacons = new ArrayList<>();
-        beacons.add(primed("a:1:1", 0.0, 0.0, -59));   // d = 1   -> weight 1.0
-        beacons.add(primed("b:1:2", 10.0, 0.0, -79));  // d = 10  -> weight 0.01
-        beacons.add(primed("c:1:3", 0.0, 10.0, -79));  // d = 10  -> weight 0.01
-
-        double[] pos = P2TrilaterationJavaSolver.estimatePositionWCL(beacons);
-        assertThat(pos).isNotNull();
-        // Heavily weighted toward A at the origin.
-        assertThat(pos[0]).isLessThan(0.5);
-        assertThat(pos[1]).isLessThan(0.5);
+    private static double dist(double[] p, double x, double y) {
+        return Math.hypot(p[0] - x, p[1] - y);
     }
 
     @Test
-    public void wclDoesNotAdvanceTheFilters() {
-        P2BeaconSample a = primed("a:1:1", 0.0, 0.0, -59);
-        P2BeaconSample b = primed("b:1:2", 10.0, 0.0, -79);
-        P2BeaconSample c = primed("c:1:3", 0.0, 10.0, -79);
-        List<P2BeaconSample> beacons = new ArrayList<>(List.of(a, b, c));
+    public void recoversAKnownInteriorPoint() {
+        // True point (3,4); distances consistent with beacons at the axes.
+        List<P2BeaconSample> bs = new ArrayList<>();
+        bs.add(atDistance("a", 0, 0, 5.0));                 // |(3,4)-(0,0)|  = 5
+        bs.add(atDistance("b", 10, 0, Math.sqrt(65)));      // |(3,4)-(10,0)| = √65
+        bs.add(atDistance("c", 0, 10, Math.sqrt(45)));      // |(3,4)-(0,10)| = √45
 
-        double aDist = a.getLastFilteredDistance();
-        double[] first = P2TrilaterationJavaSolver.estimatePositionWCL(beacons);
-        double[] second = P2TrilaterationJavaSolver.estimatePositionWCL(beacons);
-
-        // Re-running the solver is pure: identical result and untouched filters.
-        assertThat(second).containsExactly(first[0], first[1]);
-        assertThat(a.getLastFilteredDistance()).isEqualTo(aDist);
+        double[] p = P2TrilaterationJavaSolver.estimatePosition(bs);
+        assertThat(p).isNotNull();
+        assertThat(p[0]).isCloseTo(3.0, Offset.offset(0.05));
+        assertThat(p[1]).isCloseTo(4.0, Offset.offset(0.05));
     }
 
     @Test
-    public void higherExponentPullsEstimateCloserToNearestBeacon() {
-        List<P2BeaconSample> beacons = new ArrayList<>();
-        beacons.add(primed("a:1:1", 0.0, 0.0, -59));   // d = 1
-        beacons.add(primed("b:1:2", 10.0, 0.0, -79));  // d = 10
-        beacons.add(primed("c:1:3", 0.0, 10.0, -79));  // d = 10
+    public void recoversAPointOutsideTheBeaconHull() {
+        // True point (8,8) is OUTSIDE the triangle (0,0)-(4,0)-(0,4).
+        // WCL could never produce x>4 or y>4; real trilateration does.
+        List<P2BeaconSample> bs = new ArrayList<>();
+        bs.add(atDistance("a", 0, 0, Math.sqrt(128)));  // √(8²+8²)
+        bs.add(atDistance("b", 4, 0, Math.sqrt(80)));   // √(4²+8²)
+        bs.add(atDistance("c", 0, 4, Math.sqrt(80)));   // √(8²+4²)
 
-        double[] g2 = P2TrilaterationJavaSolver.estimatePositionWCL(beacons, 2.0);
-        double[] g4 = P2TrilaterationJavaSolver.estimatePositionWCL(beacons, 4.0);
-
-        // A larger exponent down-weights the far beacons more, so the estimate
-        // sits closer to A at the origin.
-        assertThat(g4[0]).isLessThan(g2[0]);
-        assertThat(g4[1]).isLessThan(g2[1]);
-        // Default overload equals g = 2.
-        double[] def = P2TrilaterationJavaSolver.estimatePositionWCL(beacons);
-        assertThat(def).containsExactly(g2[0], g2[1]);
+        double[] p = P2TrilaterationJavaSolver.estimatePosition(bs);
+        assertThat(p).isNotNull();
+        assertThat(p[0]).isCloseTo(8.0, Offset.offset(0.1));
+        assertThat(p[1]).isCloseTo(8.0, Offset.offset(0.1));
+        assertThat(p[0]).isGreaterThan(4.0); // outside the hull — impossible for WCL
     }
 
     @Test
-    public void wclReturnsNullBelowThreeBeacons() {
+    public void resultDependsOnAbsoluteDistanceScale() {
+        // Real lateration is NOT scale-invariant (WCL was). Doubling every radius
+        // must move the estimate.
+        double[] base = P2TrilaterationJavaSolver.estimatePosition(triangle(1.0));
+        double[] scaled = P2TrilaterationJavaSolver.estimatePosition(triangle(2.0));
+        assertThat(base).isNotNull();
+        assertThat(scaled).isNotNull();
+        assertThat(dist(base, scaled[0], scaled[1])).isGreaterThan(0.5);
+    }
+
+    private static List<P2BeaconSample> triangle(double scale) {
+        List<P2BeaconSample> bs = new ArrayList<>();
+        bs.add(atDistance("a", 0, 0, 5.0 * scale));
+        bs.add(atDistance("b", 10, 0, Math.sqrt(65) * scale));
+        bs.add(atDistance("c", 0, 10, Math.sqrt(45) * scale));
+        return bs;
+    }
+
+    @Test
+    public void returnsNullBelowThreeUsableBeacons() {
         List<P2BeaconSample> two = new ArrayList<>();
-        two.add(primed("a:1:1", 0.0, 0.0, -60));
-        two.add(primed("b:1:2", 3.0, 0.0, -60));
-        assertThat(P2TrilaterationJavaSolver.estimatePositionWCL(two)).isNull();
-        assertThat(P2TrilaterationJavaSolver.estimatePositionWCL(two, 3.0)).isNull();
+        two.add(atDistance("a", 0, 0, 3.0));
+        two.add(atDistance("b", 4, 0, 3.0));
+        assertThat(P2TrilaterationJavaSolver.estimatePosition(two)).isNull();
+        assertThat(P2TrilaterationJavaSolver.estimatePosition(null)).isNull();
+    }
+
+    @Test
+    public void residualIsSmallForConsistentDistances() {
+        double[] p = P2TrilaterationJavaSolver.estimatePosition(triangle(1.0));
+        double rms = P2TrilaterationJavaSolver.residualRms(triangle(1.0), p);
+        assertThat(rms).isLessThan(0.05);
     }
 
     @Test
     public void findClosestReturnsTheNearestBeaconKey() {
         Map<String, P2BeaconSample> map = new LinkedHashMap<>();
-        map.put("a:1:1", primed("a:1:1", 0.0, 0.0, -60));
-        map.put("b:1:2", primed("b:1:2", 10.0, 0.0, -60));
-        map.put("c:1:3", primed("c:1:3", 0.0, 10.0, -60));
-
-        String closest = P2TrilaterationJavaSolver.findClosestToPosition(
-                new double[]{0.2, 0.2}, map);
+        map.put("a:1:1", atDistance("a:1:1", 0.0, 0.0, 3.0));
+        map.put("b:1:2", atDistance("b:1:2", 10.0, 0.0, 3.0));
+        map.put("c:1:3", atDistance("c:1:3", 0.0, 10.0, 3.0));
+        String closest = P2TrilaterationJavaSolver.findClosestToPosition(new double[]{0.2, 0.2}, map);
         assertThat(closest).isEqualTo("a:1:1");
     }
 
     @Test
     public void findClosestIsNullSafe() {
-        assertThat(P2TrilaterationJavaSolver.findClosestToPosition(null, new LinkedHashMap<>()))
-                .isNull();
-        assertThat(P2TrilaterationJavaSolver.findClosestToPosition(new double[]{0, 0}, null))
-                .isNull();
+        assertThat(P2TrilaterationJavaSolver.findClosestToPosition(null, new LinkedHashMap<>())).isNull();
+        assertThat(P2TrilaterationJavaSolver.findClosestToPosition(new double[]{0, 0}, null)).isNull();
     }
 }

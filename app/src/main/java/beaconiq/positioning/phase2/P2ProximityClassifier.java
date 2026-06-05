@@ -85,7 +85,11 @@ public class P2ProximityClassifier {
             P2BeaconSample s = e.getValue();
             Double avg = s.getAverageRssi();
             if (avg == null || s.getRssiSampleCount() < cfg.minSamples) continue;
-            double sig = avg - s.getEffectiveTxPower(cfg.txPower);
+            // Rank on the Kalman-filtered RSSI when available (advanced once per
+            // tick by the engine); fall back to the windowed average otherwise.
+            Double filt = s.getLastFilteredRssi();
+            double rssiForRank = (filt != null) ? filt : avg;
+            double sig = rssiForRank - s.getEffectiveTxPower(cfg.txPower);
             signals.put(e.getKey(), sig);
             if (sig > topSig) {
                 secondSig = topSig; second = top;

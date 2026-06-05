@@ -15,7 +15,7 @@
   --success:      #28A745;
   --radius:       8px;
   --shadow:       0 1px 3px rgba(0,0,0,0.08);
-  --max-w:        960px;
+  --max-w:        95%;
 }
 
 body {
@@ -320,4 +320,38 @@ body {
     font-size: 12px;
   }
 }
+
+/* ── ANALYTICS (live EDA) ────────────────────────────────────── */
+.biq-bar { max-width: var(--max-w); margin: 0 auto 12px; display: flex;
+  align-items: center; gap: 12px; flex-wrap: wrap; }
+.biq-bar .biq-when { font-size: 12px; color: var(--text-dim); }
+
+.biq-stats { display: flex; flex-wrap: wrap; gap: 10px; max-width: 100%; margin: 0 auto 16px; }
+.biq-stat { flex: 1 1 130px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px; text-align: center; box-shadow: var(--shadow); }
+.biq-stat-v { font-size: 20px; font-weight: 700; color: var(--teal-light); }
+.biq-stat-k { font-size: 11px; color: var(--text-dim); margin-top: 2px;
+  text-transform: uppercase; letter-spacing: .4px; }
+
+.biq-figs { max-width: 100%; margin: 0 auto; display: grid;
+  grid-template-columns: 1fr 1fr; gap: 18px; }
+.biq-fig { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px; box-shadow: var(--shadow); margin: 0; min-width: 0; }
+.biq-fig.wide { grid-column: 1 / -1; }
+.biq-fig figcaption { font-size: 14px; font-weight: 600; color: var(--teal-light);
+  margin-bottom: 10px; padding-left: 8px; border-left: 3px solid var(--teal); }
+.biq-fig canvas { width: 100% !important; height: auto; }
+.biq-tablewrap { overflow-x: auto; }
+.biq-tablewrap table { width: 100%; }
+
+/* heatmap tables (confusion / correlation): inline bg-color set by JS */
+.biq-heat { border-collapse: collapse; width: 100%; font-size: 12px; }
+.biq-heat th { background: var(--surface-alt); color: var(--teal-light); padding: 6px 8px;
+  font-size: 11px; position: sticky; }
+.biq-heat td { padding: 6px 8px; text-align: center; border: 1px solid var(--border);
+  color: var(--text-primary); }
+.biq-heat td.lbl, .biq-heat th.lbl { background: var(--surface-alt); color: var(--teal-light);
+  font-weight: 600; text-align: left; white-space: nowrap; }
+
+@media (max-width: 760px) { .biq-figs { grid-template-columns: 1fr; } }
 </style>

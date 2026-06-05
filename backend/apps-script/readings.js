@@ -10,22 +10,24 @@ function writeReadings(sessionId, readings) {
     var r = readings[i];
     rows.push([
       sessionId,
-      r.timestamp_ms       || '',
-      r.beacon_id          || '',
-      r.uuid               || '',
-      r.major              || '',
-      r.minor              || '',
-      r.rssi_raw           || '',
-      r.rssi_filtered      || '',
-      r.distance_m         || '',
-      r.est_x              || '',
-      r.est_y              || '',
-      r.model_phase        || '',
-      r.dist_no_kalman     || '',
-      r.radar_closest      || '',
-      r.scan_nearest_rssi  || '',
-      r.service_closest    || '',
-      r.dual_conflict      || ''
+      _v(r.timestamp_ms),
+      _v(r.beacon_id),
+      _v(r.uuid),
+      _v(r.major),
+      _v(r.minor),
+      _v(r.rssi_raw),
+      _v(r.rssi_filtered),
+      _v(r.tx_power_adv),
+      _v(r.distance_m),
+      _v(r.dist_no_kalman),
+      _v(r.est_x),
+      _v(r.est_y),
+      _v(r.model_phase),
+      _v(r.active_zone),
+      _v(r.candidate_zone),
+      _v(r.confidence),
+      _v(r.margin_db),
+      _v(r.ground_truth_zone)
     ]);
   }
 

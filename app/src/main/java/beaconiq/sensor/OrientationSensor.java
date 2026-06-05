@@ -72,24 +72,6 @@ public class OrientationSensor implements SensorEventListener {
         lastMag = null;
     }
 
-    public boolean isAvailable() {
-        return activeMode != MODE_NONE;
-    }
-
-    public int getActiveMode() {
-        return activeMode;
-    }
-
-    public String getModeName() {
-        switch (activeMode) {
-            case MODE_ROTATION_VECTOR: return "RotationVector";
-            case MODE_GEOMAGNETIC: return "Geomagnetic";
-            case MODE_ACCEL_MAG: return "Accel+Mag";
-            case MODE_ACCEL_ONLY: return "Accel only (no compass)";
-            default: return "None";
-        }
-    }
-
     @Override
     public void onSensorChanged(SensorEvent event) {
         switch (activeMode) {
@@ -146,26 +128,5 @@ public class OrientationSensor implements SensorEventListener {
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
-    }
-
-    public static String getCardinalDirection(float azimuth) {
-        if (azimuth >= 337.5f || azimuth < 22.5f) return "N";
-        if (azimuth < 67.5f) return "NE";
-        if (azimuth < 112.5f) return "E";
-        if (azimuth < 157.5f) return "SE";
-        if (azimuth < 202.5f) return "S";
-        if (azimuth < 247.5f) return "SW";
-        if (azimuth < 292.5f) return "W";
-        return "NW";
-    }
-
-    public static String getTiltDescription(float pitch, float roll) {
-        float threshold = 20f;
-        if (Math.abs(pitch) < threshold && Math.abs(roll) < threshold) return "flat";
-        if (pitch < -threshold) return "tilted forward";
-        if (pitch > threshold) return "tilted back";
-        if (roll > threshold) return "tilted right";
-        if (roll < -threshold) return "tilted left";
-        return "flat";
     }
 }

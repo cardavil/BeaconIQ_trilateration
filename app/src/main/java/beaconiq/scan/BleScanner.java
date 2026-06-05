@@ -13,6 +13,7 @@ import android.util.Log;
 import org.altbeacon.beacon.Beacon;
 import org.altbeacon.beacon.BeaconManager;
 import org.altbeacon.beacon.BeaconParser;
+import org.altbeacon.beacon.RangeNotifier;
 import org.altbeacon.beacon.Region;
 
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ public class BleScanner {
     private Region allRegion;
     private BluetoothLeScanner leScanner;
     private ScanCallback genericCallback;
+    private RangeNotifier rangeNotifier;
 
     public BleScanner(Context context) {
         appContext = context.getApplicationContext();
@@ -68,7 +70,11 @@ public class BleScanner {
         beaconManager.getBeaconParsers().add(new BeaconParser()
                 .setBeaconLayout("s:0-1=fed8,m:2-2=00,p:3-3:-41,i:4-21v"));
 
-        beaconManager.addRangeNotifier((beacons, region) -> {
+        // BeaconManager is an application singleton shared by both fragments'
+        // scanners. The notifier is registered only while this scanner is
+        // actively scanning (see startScan/stopScan) so the inactive fragment's
+        // callback does not also fire.
+        rangeNotifier = (beacons, region) -> {
             if (listener == null) return;
             for (Beacon b : beacons) {
                 knownBeaconMacs.add(b.getBluetoothAddress());
@@ -78,7 +84,7 @@ public class BleScanner {
                 byte[] cached = rawBytesCache.remove(b.getBluetoothAddress());
                 listener.onBeaconDiscovered(b, cached);
             }
-        });
+        };
     }
 
     private void initGenericCallback() {
@@ -129,9 +135,11 @@ public class BleScanner {
         if (isScanning) return;
 
         try {
+            beaconManager.addRangeNotifier(rangeNotifier);
             beaconManager.startRangingBeacons(allRegion);
         } catch (Exception e) {
             Log.e(TAG, "Failed to start beacon ranging", e);
+            beaconManager.removeRangeNotifier(rangeNotifier);
             if (listener != null) listener.onScanFailed(-1);
             return;
         }
@@ -164,6 +172,8 @@ public class BleScanner {
             beaconManager.stopRangingBeacons(allRegion);
         } catch (Exception e) {
             Log.e(TAG, "Failed to stop beacon ranging", e);
+        } finally {
+            beaconManager.removeRangeNotifier(rangeNotifier);
         }
 
         if (leScanner != null) {

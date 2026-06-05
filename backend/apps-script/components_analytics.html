@@ -1,0 +1,41 @@
+<!-- Live Analytics skeleton. Data comes from api_getAnalytics() and is rendered
+     by renderAnalytics() in js_main (Chart.js + heatmap tables).
+     Figure order = EDA narrative: overview stats -> session context -> signal ->
+     Kalman -> proximity model -> correlation. -->
+<div class="section">
+  <div class="section-title">Exploratory Data Analysis &mdash; live</div>
+
+  <div class="biq-bar">
+    <button class="btn-action" id="an-refresh" onclick="loadAnalytics(true)">Refresh</button>
+    <span class="biq-when" id="an-when"></span>
+  </div>
+  <div class="status-line" id="an-status"></div>
+
+  <div class="biq-stats" id="an-cards"></div>
+
+  <div class="biq-figs">
+    <!-- 1. Overview: descriptive statistics -->
+    <figure class="biq-fig wide"><figcaption>Readings &mdash; descriptive statistics</figcaption><div class="biq-tablewrap" id="an-desc-readings"></div></figure>
+    <figure class="biq-fig wide"><figcaption>Sessions &mdash; descriptive statistics</figcaption><div class="biq-tablewrap" id="an-desc-sessions"></div></figure>
+
+    <!-- 2. Session context -->
+    <figure class="biq-fig"><figcaption>Sessions by mode</figcaption><canvas id="an-mode"></canvas></figure>
+    <figure class="biq-fig"><figcaption>Sessions by movement</figcaption><canvas id="an-move"></canvas></figure>
+    <figure class="biq-fig"><figcaption>Sessions by phone model</figcaption><canvas id="an-phone"></canvas></figure>
+    <figure class="biq-fig"><figcaption>iBeacon hits vs total scans</figcaption><canvas id="an-coverage"></canvas></figure>
+    <figure class="biq-fig"><figcaption>iBeacon hit-rate (%)</figcaption><canvas id="an-hitrate"></canvas></figure>
+
+    <!-- 3. Signal quality -->
+    <figure class="biq-fig"><figcaption>RSSI raw distribution</figcaption><canvas id="an-rssi"></canvas></figure>
+
+    <!-- 4. Distance / Kalman -->
+    <figure class="biq-fig"><figcaption>Per-beacon distance &sigma;: Kalman vs raw</figcaption><canvas id="an-kalman"></canvas></figure>
+
+    <!-- 5. Proximity model -->
+    <figure class="biq-fig wide"><figcaption>Proximity confusion (ground-truth &times; predicted)</figcaption><div class="biq-tablewrap" id="an-confusion"></div></figure>
+    <figure class="biq-fig wide"><figcaption>Proximity accuracy vs confidence threshold</figcaption><canvas id="an-accconf"></canvas></figure>
+
+    <!-- 6. Correlation -->
+    <figure class="biq-fig wide"><figcaption>Correlation &mdash; reading variables</figcaption><div class="biq-tablewrap" id="an-correlation"></div></figure>
+  </div>
+</div>
