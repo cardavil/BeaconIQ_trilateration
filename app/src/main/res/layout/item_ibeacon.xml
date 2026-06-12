@@ -23,8 +23,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:fontFamily="monospace"
-        android:textColor="@color/text_dim"
-        android:textSize="11sp" />
+        android:textColor="@color/text_muted"
+        android:textSize="13sp" />
 
     <TextView
         android:id="@+id/ibeacon_signal"

@@ -31,6 +31,12 @@ public final class P2BeaconIds {
         return compositeId;
     }
 
+    /** Full proximity UUID, i.e. the first segment of "uuid:major:minor". */
+    public static String extractUuid(String compositeId) {
+        int sep = compositeId.indexOf(':');
+        return sep >= 0 ? compositeId.substring(0, sep) : compositeId;
+    }
+
     /** Canvas label: "major,minor". */
     public static String extractLabel(String compositeId) {
         String[] parts = compositeId.split(":");

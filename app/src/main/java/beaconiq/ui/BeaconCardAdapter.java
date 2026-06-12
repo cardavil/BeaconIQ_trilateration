@@ -78,15 +78,16 @@ public class BeaconCardAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
     }
 
     /** Single holder for both the closest and normal card layouts — they bind
-     * the same three views; only the inflated layout (style) differs. */
+     * the same four views; only the inflated layout (style) differs. */
     static class CardViewHolder extends RecyclerView.ViewHolder {
-        final TextView label, distance, rssi;
+        final TextView label, distance, rssi, uuid;
 
         CardViewHolder(View v) {
             super(v);
             label = v.findViewById(R.id.beacon_card_label);
             distance = v.findViewById(R.id.beacon_card_distance);
             rssi = v.findViewById(R.id.beacon_card_rssi);
+            uuid = v.findViewById(R.id.beacon_card_uuid);
         }
 
         void bind(BeaconCardItem item) {
@@ -96,6 +97,7 @@ public class BeaconCardAdapter extends RecyclerView.Adapter<RecyclerView.ViewHol
             rssi.setText(itemView.getContext()
                     .getString(R.string.beacon_card_rssi, item.getLastRawRssi()));
             rssi.setTextColor(rssiColor(itemView, item.getLastRawRssi()));
+            uuid.setText(item.getUuid());
         }
     }
 }

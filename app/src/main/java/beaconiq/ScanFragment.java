@@ -243,9 +243,11 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         if (trilaterationSection != null) trilaterationSection.setVisibility(prox ? View.GONE : View.VISIBLE);
         if (proximitySection != null) proximitySection.setVisibility(prox ? View.VISIBLE : View.GONE);
 
-        // The radar canvas is the trilateration view only.
+        // The canvas serves both modes: trilateration draws the position
+        // estimate; proximity draws beacons + active zone only.
+        exploreCanvas.setProximityMode(prox);
         boolean scanning = bleScanner != null && bleScanner.isScanning();
-        exploreCanvas.setVisibility(!prox && scanning ? View.VISIBLE : View.GONE);
+        exploreCanvas.setVisibility(scanning ? View.VISIBLE : View.GONE);
     }
 
     private void toggleScan() {
@@ -279,8 +281,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             engine.clear();
             engine.resetAutoPositionCounter();
             exploreCanvas.clear();
-            exploreCanvas.setVisibility(
-                    config.mode == P2ModelConfig.MODE_TRILATERATION ? View.VISIBLE : View.GONE);
+            exploreCanvas.setVisibility(View.VISIBLE);
             handler.postDelayed(positionEvalRunnable, config.evalIntervalMs);
 
             vibratedBeaconIds.clear();
@@ -325,6 +326,9 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         if (config.mode == P2ModelConfig.MODE_PROXIMITY) {
             P2ProximityClassifier.ZoneResult zr = engine.classifyProximity(config, now);
             updateCalibratedKeys();
+            // Beacons-only map: no position estimate in proximity mode, the
+            // active zone gets the closest-beacon highlight.
+            exploreCanvas.updateP2(engine.snapshot(), null, zr.activeZone);
             updateBeaconCards(zr.activeZone);   // highlight the active zone card
             showProximityStatus(zr);
         } else {
@@ -401,8 +405,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             engine.clear();
             engine.resetAutoPositionCounter();
             exploreCanvas.clear();
-            exploreCanvas.setVisibility(
-                    config.mode == P2ModelConfig.MODE_TRILATERATION ? View.VISIBLE : View.GONE);
+            exploreCanvas.setVisibility(View.VISIBLE);
             handler.postDelayed(positionEvalRunnable, config.evalIntervalMs);
             beaconBottomSheet.setVisibility(View.VISIBLE);
             bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
@@ -627,8 +630,9 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             Double dist = sample.getLastFilteredDistance();
             if (dist == null) continue;
             String label = P2BeaconIds.extractLabel(compositeId);
+            String uuid = P2BeaconIds.extractUuid(compositeId);
             boolean isClosest = compositeId.equals(closestKey);
-            cards.add(new BeaconCardItem(compositeId, label,
+            cards.add(new BeaconCardItem(compositeId, label, uuid,
                     sample.getLastRawRssi(), dist, isClosest));
         }
         Collections.sort(cards);
@@ -658,6 +662,7 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
             }
             msg.append("\n\n");
         }
+        msg.append("UUID: ").append(P2BeaconIds.extractUuid(compositeId)).append("\n\n");
         msg.append("This point's content — title, description and media — ")
            .append("will be shown here (provided separately).");
 

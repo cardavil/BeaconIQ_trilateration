@@ -53,6 +53,7 @@ public class PositioningCanvasView extends View {
 
     private double lastScale, lastOffX, lastOffY;
     private boolean drawParamsReady;
+    private boolean proximityMode;
     private Set<String> calibratedKeys = Collections.emptySet();
     private OnBeaconTapListener beaconTapListener;
 
@@ -211,6 +212,21 @@ public class PositioningCanvasView extends View {
         invalidate();
     }
 
+    /**
+     * Proximity mode draws beacons + active zone only: there is no position
+     * estimate, so the "need >= 3 beacons" hint is suppressed and any trail
+     * left over from a trilateration session is discarded.
+     */
+    public void setProximityMode(boolean enabled) {
+        if (this.proximityMode == enabled) return;
+        this.proximityMode = enabled;
+        if (enabled) {
+            estimatedPosition = null;
+            positionTrail.clear();
+        }
+        invalidate();
+    }
+
     public void setOnBeaconTapListener(OnBeaconTapListener listener) {
         this.beaconTapListener = listener;
     }
@@ -293,7 +309,7 @@ public class PositioningCanvasView extends View {
         }
 
         int active = countActive();
-        if (active < 3) {
+        if (active < 3 && !proximityMode) {
             canvas.drawText(getContext().getString(R.string.canvas_need_beacons, active),
                     w / 2f, h / 2f, messagePaint);
         }
