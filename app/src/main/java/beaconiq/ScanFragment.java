@@ -326,9 +326,10 @@ public class ScanFragment extends Fragment implements BleScanner.ScanListener {
         if (config.mode == P2ModelConfig.MODE_PROXIMITY) {
             P2ProximityClassifier.ZoneResult zr = engine.classifyProximity(config, now);
             updateCalibratedKeys();
-            // Beacons-only map: no position estimate in proximity mode, the
-            // active zone gets the closest-beacon highlight.
-            exploreCanvas.updateP2(engine.snapshot(), null, zr.activeZone);
+            // Beacons-only map: no position estimate in proximity mode. The
+            // committed zone gets the solid highlight; the instant candidate
+            // gets a dashed ring while the switch is pending hysteresis/dwell.
+            exploreCanvas.updateP2(engine.snapshot(), null, zr.activeZone, zr.candidateZone);
             updateBeaconCards(zr.activeZone);   // highlight the active zone card
             showProximityStatus(zr);
         } else {

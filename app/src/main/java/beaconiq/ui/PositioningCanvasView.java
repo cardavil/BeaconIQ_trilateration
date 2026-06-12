@@ -33,6 +33,7 @@ public class PositioningCanvasView extends View {
     private static final int MAX_TRAIL_SIZE = 10;
     private static final float BEACON_RADIUS = 18f;
     private static final float CLOSEST_BEACON_RADIUS = 24f;
+    private static final float CANDIDATE_RING_RADIUS = 26f;
     private static final float GLOW_RADIUS = 36f;
     private static final float POSITION_RADIUS = 12f;
     private static final float RING_RADIUS = 28f;
@@ -42,6 +43,7 @@ public class PositioningCanvasView extends View {
     private Map<String, BeaconPos> beaconMap = new HashMap<>();
     private double[] estimatedPosition;
     private String closestBeaconKey;
+    private String candidateBeaconKey;
     private final Deque<double[]> positionTrail = new ArrayDeque<>();
 
     private float compassAzimuth = 0f;
@@ -59,6 +61,7 @@ public class PositioningCanvasView extends View {
 
     private final Paint beaconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint closestBeaconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint candidateRingPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint glowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint positionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -100,6 +103,13 @@ public class PositioningCanvasView extends View {
 
         closestBeaconPaint.setColor(ContextCompat.getColor(ctx, R.color.status_warn));
         closestBeaconPaint.setStyle(Paint.Style.FILL);
+
+        // Candidate zone (proximity): hollow dashed ring — "switch being
+        // considered", visually distinct from the solid committed-zone fill.
+        candidateRingPaint.setColor(ContextCompat.getColor(ctx, R.color.status_warn));
+        candidateRingPaint.setStyle(Paint.Style.STROKE);
+        candidateRingPaint.setStrokeWidth(4f);
+        candidateRingPaint.setPathEffect(new DashPathEffect(new float[]{12f, 8f}, 0f));
 
         glowPaint.setColor(ContextCompat.getColor(ctx, R.color.beacon_glow));
         glowPaint.setStyle(Paint.Style.FILL);
@@ -167,6 +177,12 @@ public class PositioningCanvasView extends View {
     // Phase II entry point with closest beacon
     public void updateP2(Map<String, P2BeaconSample> beacons,
                          double[] position, String closestKey) {
+        updateP2(beacons, position, closestKey, null);
+    }
+
+    // Phase II entry point with closest beacon + proximity candidate zone
+    public void updateP2(Map<String, P2BeaconSample> beacons,
+                         double[] position, String closestKey, String candidateKey) {
         Map<String, BeaconPos> converted = new HashMap<>();
         for (Map.Entry<String, P2BeaconSample> e : beacons.entrySet()) {
             P2BeaconSample b = e.getValue();
@@ -175,12 +191,14 @@ public class PositioningCanvasView extends View {
             Double liveDistance = b.isLive() ? b.getLastFilteredDistance() : null;
             converted.put(e.getKey(), new BeaconPos(b.getX(), b.getY(), liveDistance));
         }
-        updateInternal(converted, position, closestKey);
+        updateInternal(converted, position, closestKey, candidateKey);
     }
 
-    private void updateInternal(Map<String, BeaconPos> beacons, double[] position, String closestKey) {
+    private void updateInternal(Map<String, BeaconPos> beacons, double[] position,
+                                String closestKey, String candidateKey) {
         this.beaconMap = beacons;
         this.closestBeaconKey = closestKey;
+        this.candidateBeaconKey = candidateKey;
 
         if (position != null) {
             positionTrail.addLast(new double[]{position[0], position[1]});
@@ -206,6 +224,7 @@ public class PositioningCanvasView extends View {
         beaconMap.clear();
         estimatedPosition = null;
         closestBeaconKey = null;
+        candidateBeaconKey = null;
         positionTrail.clear();
         cachedBeaconKeys = null;
         drawParamsReady = false;
@@ -355,6 +374,10 @@ public class PositioningCanvasView extends View {
             float cy = toScreenY(b.y, scale, offY);
 
             boolean isClosest = entry.getKey().equals(closestBeaconKey);
+            // Candidate = instant strongest beacon this tick. Only ringed while
+            // it differs from the committed zone (i.e. a switch is pending
+            // hysteresis/dwell); once committed it gets the solid highlight.
+            boolean isCandidate = !isClosest && entry.getKey().equals(candidateBeaconKey);
             boolean isCalibrated = calibratedKeys.contains(entry.getKey());
 
             if (isClosest) {
@@ -363,12 +386,15 @@ public class PositioningCanvasView extends View {
             } else {
                 canvas.drawCircle(cx, cy, BEACON_RADIUS,
                         isCalibrated ? calibratedBeaconPaint : beaconPaint);
+                if (isCandidate) {
+                    canvas.drawCircle(cx, cy, CANDIDATE_RING_RADIUS, candidateRingPaint);
+                }
             }
 
             String label = entry.getKey();
             String[] parts = label.split(":");
             if (parts.length >= 3) label = parts[1] + "," + parts[2];
-            canvas.drawText(label, cx, cy - (isClosest ? 30f : 24f), labelPaint);
+            canvas.drawText(label, cx, cy - (isClosest ? 30f : (isCandidate ? 34f : 24f)), labelPaint);
         }
     }
 
