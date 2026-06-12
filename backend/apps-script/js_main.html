@@ -174,6 +174,7 @@ function renderAnalytics(d) {
     'total_scan_results', 'ibeacon_hits', AN_TEAL);
   anHist('an-hitrate', (S.coverage || []).map(function (c) { return c.rate * 100; }), 0, 100, 5, 'hit rate (%)', AN_TEAL2);
   anBarBins('an-rssi', R.rssi_hist || [], 'rssi_raw (dBm)', AN_TEAL);
+  anRssiByPhone('an-rssi-phone', R.rssi_hist_by_phone || {});
   anKalman('an-kalman', k.scatter || []);
   anAccConf('an-accconf', px.curve || []);
 
@@ -181,6 +182,109 @@ function renderAnalytics(d) {
   anCorr('an-correlation', (R.correlation && R.correlation.labels) || [], (R.correlation && R.correlation.matrix) || []);
   anDescribe('an-desc-readings', R.describe || {});
   anDescribe('an-desc-sessions', S.describe || {});
+  anSweep(d.sweep || null);
+  anExplain(d);
+}
+
+// ── dynamic "What it says today" lines in the figure explainers ──
+function anExp(id, txt) { var el = document.getElementById(id); if (el) el.textContent = txt; }
+function _curveAt(curve, t) {
+  if (!curve) return null;
+  for (var i = 0; i < curve.length; i++) if (Math.abs(curve[i].t - t) < 0.001) return curve[i];
+  return null;
+}
+function anExplain(d) {
+  var R = d.readings || {}, S = d.sessions || {}, px = R.proximity || {}, k = R.kalman || {};
+  var rssi = (R.describe && R.describe.rssi_raw) || {};
+  var modes = Object.keys(S.by_mode || {}).map(function (m) { return (S.by_mode[m]) + ' ' + m; });
+  anExp('an-exp-mode', 'Today: ' + modes.join(' · ') + '.');
+  var hr = S.hit_rate_pct || {};
+  anExp('an-exp-coverage', 'Today: on average only ' + fmtN(hr.mean) + '% (median ' + fmtN(hr.median) +
+    '%) of what the phone sees is our beacons — a lot of foreign Bluetooth around.');
+  anExp('an-exp-rssi', 'Today: mean RSSI ' + fmtN(rssi.mean) + ' dBm with σ ' + fmtN(rssi.std) + ' dB → ' +
+    (rssi.std >= 6 ? 'noisy signal.' : 'fairly stable signal.'));
+  anExp('an-exp-kalman', 'Today: the Kalman filter cuts the distance jitter by ~' + fmtN(k.mean_reduction_pct) +
+    '% on average. It helps, but the base noise is still large.');
+  if (px.n) anExp('an-exp-confusion', 'Today: n = ' + Number(px.n).toLocaleString() +
+    ' graded readings, accuracy ' + (px.accuracy * 100).toFixed(1) + '%.');
+  var c04 = _curveAt(px.curve, 0.4), c07 = _curveAt(px.curve, 0.7);
+  if (c04 && c07) anExp('an-exp-accconf', 'Today: at the 0.40 default threshold → ' + c04.acc +
+    '% accuracy keeping ' + c04.coverage + '% of readings; at 0.70 → ' + c07.acc + '% keeping ' + c07.coverage + '%.');
+}
+
+// ── TX x N trilateration sweep ──────────────────────────────
+function anSweep(sw) {
+  var best = document.getElementById('an-sweep-best');
+  var heat = document.getElementById('an-sweep-heat');
+  var rank = document.getElementById('an-sweep-ranked');
+  var pts  = document.getElementById('an-sweep-points');
+  if (!heat) return;
+  if (!sw || !sw.fixed_sessions || !sw.pivot_mean) {
+    heat.innerHTML = '<p class="loading-msg">No fixed-point sessions found yet ' +
+      '(needs a coordinate in the session notes, e.g. "Z1 | (0.4, 0.4)", plus ≥3 anchors in beacon_config).</p>';
+    if (rank) rank.innerHTML = ''; if (pts) pts.innerHTML = ''; if (best) best.textContent = '';
+    return;
+  }
+  if (best) best.innerHTML = 'BEST: <b>TX ' + sw.best.tx + ' dBm · N ' + Number(sw.best.n).toFixed(1) +
+    '</b> → mean error <b>' + Number(sw.best.mean_err_m).toFixed(2) + ' m</b> (median ' +
+    Number(sw.best.median_err_m).toFixed(2) + ' m) over ' + sw.fixed_sessions +
+    ' fixed points · room diagonal ' + sw.room_diag_m + ' m';
+
+  // 3x3 heatmap: green (low error) -> red (high error)
+  var vals = [];
+  sw.pivot_mean.forEach(function (row) { row.forEach(function (v) { if (v != null) vals.push(v); }); });
+  var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  var h = '<table class="biq-heat"><tr><th class="lbl">TX \\ N</th>';
+  sw.n_grid.forEach(function (n) { h += '<th>N=' + Number(n).toFixed(1) + '</th>'; });
+  h += '</tr>';
+  sw.pivot_mean.forEach(function (row, i) {
+    h += '<tr><td class="lbl">TX=' + sw.tx_grid[i] + '</td>';
+    row.forEach(function (v) {
+      if (v == null) { h += '<td style="background:#eee;color:#999">—</td>'; return; }
+      var t = hi > lo ? (v - lo) / (hi - lo) : 0;
+      var bg = 'rgb(' + Math.round(200 + 39 * t) + ',' + Math.round(230 - 76 * t) + ',' + Math.round(201 - 47 * t) + ')';
+      h += '<td style="background:' + bg + ';color:#000">' + Number(v).toFixed(2) + ' m</td>';
+    });
+    h += '</tr>';
+  });
+  heat.innerHTML = h + '</table>';
+
+  if (rank) {
+    var rh = '<table class="biq-table"><thead><tr><th>TX (dBm)</th><th>N</th><th>mean (m)</th>' +
+      '<th>median (m)</th><th>max (m)</th><th>points</th></tr></thead><tbody>';
+    (sw.ranked || []).forEach(function (c) {
+      rh += '<tr><td>' + c.tx + '</td><td>' + Number(c.n).toFixed(1) + '</td><td>' + c.mean_err_m +
+        '</td><td>' + c.median_err_m + '</td><td>' + c.max_err_m + '</td><td>' + c.n_points + '</td></tr>';
+    });
+    rank.innerHTML = rh + '</tbody></table>';
+  }
+  if (pts) {
+    var ph = '<table class="biq-table"><thead><tr><th>point</th><th>mean error (m)</th></tr></thead><tbody>';
+    (sw.by_point || []).forEach(function (p) {
+      ph += '<tr><td class="mono">' + escapeHtml(p.label) + '</td><td>' + p.mean_err_m + '</td></tr>';
+    });
+    pts.innerHTML = ph + '</tbody></table>';
+  }
+  anExp('an-exp-sweep', 'Today: best combo is TX=' + sw.best.tx + ' dBm, N=' + Number(sw.best.n).toFixed(1) +
+    ' → mean ' + Number(sw.best.mean_err_m).toFixed(2) + ' m, median ' + Number(sw.best.median_err_m).toFixed(2) +
+    ' m. Points measured: ' + (sw.points || []).join(', ') + '.');
+}
+
+var AN_PHONE_COLORS = ['#00838f', '#ef6c00', '#90a4ae', '#26c6da', '#8e24aa', '#5d4037'];
+function anRssiByPhone(id, byPhone) {
+  var ctx = _ctx(id); if (!ctx) return; _destroy(id);
+  var phones = Object.keys(byPhone || {});
+  if (!phones.length) return;
+  var labels = byPhone[phones[0]].map(function (b) { return b.x0; });
+  var datasets = phones.map(function (p, i) {
+    var col = AN_PHONE_COLORS[i % AN_PHONE_COLORS.length];
+    return { type: 'line', label: p, data: byPhone[p].map(function (b) { return b.c; }),
+             borderColor: col, backgroundColor: col, pointRadius: 0, borderWidth: 2, tension: .25 };
+  });
+  _anCharts[id] = new Chart(ctx, { data: { labels: labels, datasets: datasets },
+    options: { maintainAspectRatio: true, aspectRatio: 1.7,
+      scales: { x: { title: { display: true, text: 'rssi_raw (dBm)' }, ticks: { maxTicksLimit: 12 } },
+                y: { beginAtZero: true, title: { display: true, text: 'count' } } } } });
 }
 
 function fmtN(v) { return (v == null || isNaN(v)) ? '—' : Number(v).toFixed(1); }

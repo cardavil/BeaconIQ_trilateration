@@ -353,5 +353,22 @@ body {
 .biq-heat td.lbl, .biq-heat th.lbl { background: var(--surface-alt); color: var(--teal-light);
   font-weight: 600; text-align: left; white-space: nowrap; }
 
+/* collapsible plain-language explainers under each figure */
+.biq-explain { margin-top: 10px; font-size: 12px; color: var(--text-dim);
+  border-top: 1px dashed var(--border); padding-top: 8px; }
+.biq-explain summary { cursor: pointer; color: var(--teal-light); font-weight: 600;
+  font-size: 12px; user-select: none; }
+.biq-explain p, .biq-explain ul { margin: 8px 0 0; line-height: 1.5; }
+.biq-explain ul { padding-left: 18px; }
+.biq-explain b { color: var(--text-primary); }
+.biq-explain .an-exp { color: var(--text-primary); }
+.biq-explain .an-exp:empty { display: none; }
+.biq-glossary { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 16px; margin-top: 18px; }
+.an-sweep-best { font-size: 13px; color: var(--text-primary); margin: 0 0 10px;
+  padding: 8px 10px; background: var(--surface-alt); border-radius: var(--radius);
+  border-left: 3px solid var(--teal); }
+.an-sweep-best:empty { display: none; }
+
 @media (max-width: 760px) { .biq-figs { grid-template-columns: 1fr; } }
 </style>

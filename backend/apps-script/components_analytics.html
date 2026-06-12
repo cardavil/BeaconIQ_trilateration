@@ -1,7 +1,9 @@
 <!-- Live Analytics skeleton. Data comes from api_getAnalytics() and is rendered
      by renderAnalytics() in js_main (Chart.js + heatmap tables).
      Figure order = EDA narrative: overview stats -> session context -> signal ->
-     Kalman -> proximity model -> correlation. -->
+     Kalman -> proximity model -> trilateration sweep -> correlation.
+     Each figure carries a collapsible plain-language explainer; the dynamic
+     "What it says today" line (span.an-exp) is filled by renderAnalytics(). -->
 <div class="section">
   <div class="section-title">Exploratory Data Analysis &mdash; live</div>
 
@@ -11,6 +13,20 @@
   </div>
   <div class="status-line" id="an-status"></div>
 
+  <details class="biq-explain">
+    <summary>What these numbers mean (plain language)</summary>
+    <ul>
+      <li><b>Sessions</b> — each <i>recording</i> you made (stand or walk while the app logs for a while).</li>
+      <li><b>Readings</b> — each time the phone <i>saw a beacon</i> at an instant. A session holds hundreds.</li>
+      <li><b>RSSI mean (dBm)</b> — how <b>strong</b> the signal arrives. Closer to 0 = stronger/nearer; more negative = farther/weaker.</li>
+      <li><b>RSSI &sigma; (dBm)</b> — how much the signal <i>trembles</i> even when you stand still. ~9 dB is <b>a lot</b>: it is the root of why positioning is hard.</li>
+      <li><b>Kalman &sigma;&darr;</b> — the filter reduces the distance jitter by this much. It helps, but does <b>not</b> fix the base noise.</li>
+      <li><b>Proximity acc.</b> — of the readings with a ground-truth zone, how often the model <b>got the zone right</b>.</li>
+      <li><b>Prox. eval reads</b> — the subset where you annotated <i>"I was in this zone"</i>. It is the only data that can <b>grade</b> the model.</li>
+      <li><b>iBeacon hit-rate</b> — of <b>all</b> the Bluetooth the phone picks up, the % that is <b>our</b> beacons. The rest is ambient noise (earbuds, watches, TVs&hellip;).</li>
+    </ul>
+  </details>
+
   <div class="biq-stats" id="an-cards"></div>
 
   <div class="biq-figs">
@@ -19,23 +35,112 @@
     <figure class="biq-fig wide"><figcaption>Sessions &mdash; descriptive statistics</figcaption><div class="biq-tablewrap" id="an-desc-sessions"></div></figure>
 
     <!-- 2. Session context -->
-    <figure class="biq-fig"><figcaption>Sessions by mode</figcaption><canvas id="an-mode"></canvas></figure>
-    <figure class="biq-fig"><figcaption>Sessions by movement</figcaption><canvas id="an-move"></canvas></figure>
-    <figure class="biq-fig"><figcaption>Sessions by phone model</figcaption><canvas id="an-phone"></canvas></figure>
-    <figure class="biq-fig"><figcaption>iBeacon hits vs total scans</figcaption><canvas id="an-coverage"></canvas></figure>
-    <figure class="biq-fig"><figcaption>iBeacon hit-rate (%)</figcaption><canvas id="an-hitrate"></canvas></figure>
+    <figure class="biq-fig"><figcaption>Sessions by mode</figcaption><canvas id="an-mode"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> session counts per recording mode (labels are normalized: the sheet column mixed mode + solver). Taller bar = more sessions of that kind.</p>
+        <p class="an-exp" id="an-exp-mode"></p>
+      </details>
+    </figure>
+    <figure class="biq-fig"><figcaption>Sessions by movement</figcaption><canvas id="an-move"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> whether you were standing or walking during each session. The model behaves differently in each case.</p>
+      </details>
+    </figure>
+    <figure class="biq-fig"><figcaption>Sessions by phone model</figcaption><canvas id="an-phone"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> which phone recorded each session. Different radios measure RSSI differently, so this matters when comparing.</p>
+      </details>
+    </figure>
+    <figure class="biq-fig"><figcaption>iBeacon hits vs total scans</figcaption><canvas id="an-coverage"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> each dot is a session: X = <b>all</b> Bluetooth captured, Y = how much was <b>our</b> beacons.</p>
+        <p><b>How to read it:</b> dots far below the diagonal mean most traffic is NOT ours (noisy environment). Not a model problem, but worth knowing.</p>
+        <p class="an-exp" id="an-exp-coverage"></p>
+      </details>
+    </figure>
+    <figure class="biq-fig"><figcaption>iBeacon hit-rate (%)</figcaption><canvas id="an-hitrate"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> the distribution of the hit-rate (% of captured Bluetooth that is ours) across sessions — whether you usually capture little or much of your own signal.</p>
+      </details>
+    </figure>
 
     <!-- 3. Signal quality -->
-    <figure class="biq-fig"><figcaption>RSSI raw distribution</figcaption><canvas id="an-rssi"></canvas></figure>
+    <figure class="biq-fig"><figcaption>RSSI raw distribution</figcaption><canvas id="an-rssi"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> how often each signal level (RSSI) appears across all readings.</p>
+        <p><b>How to read it:</b> a narrow bell = stable signal; a wide one = scattered/noisy signal.</p>
+        <p class="an-exp" id="an-exp-rssi"></p>
+      </details>
+    </figure>
+    <figure class="biq-fig"><figcaption>RSSI raw distribution by phone</figcaption><canvas id="an-rssi-phone"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> the same RSSI distribution, split per phone model.</p>
+        <p><b>How to read it:</b> if the bells sit at different positions, the phones <b>measure the signal differently</b> — it matters when comparing sessions across phones.</p>
+      </details>
+    </figure>
 
     <!-- 4. Distance / Kalman -->
-    <figure class="biq-fig"><figcaption>Per-beacon distance &sigma;: Kalman vs raw</figcaption><canvas id="an-kalman"></canvas></figure>
+    <figure class="biq-fig"><figcaption>Per-beacon distance &sigma;: Kalman vs raw</figcaption><canvas id="an-kalman"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> per beacon, how much the raw distance <i>trembles</i> (X) vs the filtered one (Y).</p>
+        <p><b>How to read it:</b> points <b>below</b> the diagonal = the filter <b>reduced</b> the jitter. The lower, the better.</p>
+        <p class="an-exp" id="an-exp-kalman"></p>
+      </details>
+    </figure>
 
     <!-- 5. Proximity model -->
-    <figure class="biq-fig wide"><figcaption>Proximity confusion (ground-truth &times; predicted)</figcaption><div class="biq-tablewrap" id="an-confusion"></div></figure>
-    <figure class="biq-fig wide"><figcaption>Proximity accuracy vs confidence threshold</figcaption><canvas id="an-accconf"></canvas></figure>
+    <figure class="biq-fig wide"><figcaption>Proximity confusion (ground-truth &times; predicted)</figcaption><div class="biq-tablewrap" id="an-confusion"></div>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> a grid. <b>Rows = real zone</b> (where you were), <b>columns = zone the model predicted</b>.</p>
+        <p><b>How to read it:</b> the numbers on the <b>diagonal</b> (real = predicted) are <b>correct</b>. Everything off it is confusion. An <i>inflated</i> column = the model over-predicts that zone.</p>
+        <p class="an-exp" id="an-exp-confusion"></p>
+      </details>
+    </figure>
+    <figure class="biq-fig wide"><figcaption>Proximity accuracy vs confidence threshold</figcaption><canvas id="an-accconf"></canvas>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> two curves vs the <i>confidence threshold</i>: <b>accuracy</b>, and <b>coverage</b> (% of readings kept when demanding that confidence).</p>
+        <p><b>How to read it:</b> raising the threshold = act <b>only when the model is sure</b> &rarr; more accuracy, but fewer readings (less coverage). It is a <b>trade-off</b>: pick by whether you prefer to be right more often or to act more often.</p>
+        <p class="an-exp" id="an-exp-accconf"></p>
+      </details>
+    </figure>
 
-    <!-- 6. Correlation -->
-    <figure class="biq-fig wide"><figcaption>Correlation &mdash; reading variables</figcaption><div class="biq-tablewrap" id="an-correlation"></div></figure>
+    <!-- 6. TX x N trilateration sweep -->
+    <figure class="biq-fig wide"><figcaption>TX &times; N trilateration sweep &mdash; mean position error (m)</figcaption>
+      <p class="an-sweep-best" id="an-sweep-best"></p>
+      <div class="biq-tablewrap" id="an-sweep-heat"></div>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> TX power and path-loss N are <b>not</b> capture settings — they are post-processing math (<code>distance = 10^((TX &minus; rssi)/(10&middot;N))</code>). So the raw RSSI recorded at the fixed standing points can be replayed through the LSQ solver for every TX &times; N combination, measuring the position error against the true coordinates noted per session.</p>
+        <p><b>How to read it:</b> each cell is the mean position error (meters) for that combo across all fixed points — greener/lower is better. The room is 3&times;3 m (diagonal 4.24 m), so that is the worst-case error scale.</p>
+        <p class="an-exp" id="an-exp-sweep"></p>
+      </details>
+    </figure>
+    <figure class="biq-fig"><figcaption>Sweep &mdash; ranked combinations</figcaption><div class="biq-tablewrap" id="an-sweep-ranked"></div></figure>
+    <figure class="biq-fig"><figcaption>Sweep &mdash; mean error per point</figcaption><div class="biq-tablewrap" id="an-sweep-points"></div>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> which standing points are easiest/hardest for the solver, averaged over all TX &times; N combos. Hard points usually sit near walls or far from 3 anchors.</p>
+      </details>
+    </figure>
+
+    <!-- 7. Correlation -->
+    <figure class="biq-fig wide"><figcaption>Correlation &mdash; reading variables</figcaption><div class="biq-tablewrap" id="an-correlation"></div>
+      <details class="biq-explain"><summary>How to read this</summary>
+        <p><b>What it shows:</b> how much the numeric variables <i>move together</i>. Near +1 or &minus;1 = strong relation; near 0 = none.</p>
+        <p><b>Important:</b> <code>distance_m</code> and <code>dist_no_kalman</code> are almost perfectly tied to RSSI <i>because distance is computed from RSSI</i> with a formula. That is <b>not a finding</b> — they are the same data in another unit. Only the RSSI carries real information.</p>
+      </details>
+    </figure>
   </div>
+
+  <details class="biq-explain biq-glossary">
+    <summary>Glossary (one line each)</summary>
+    <ul>
+      <li><b>RSSI (dBm):</b> signal strength. Closer to 0 = stronger. Always negative.</li>
+      <li><b>Kalman:</b> a filter that <i>smooths</i> a noisy measurement by averaging intelligently.</li>
+      <li><b>Zone:</b> the nearest beacon/spot (the <i>proximity</i> model does not use coordinates).</li>
+      <li><b>Confidence:</b> how sure the model is about the chosen zone (0 to 1).</li>
+      <li><b>Coverage:</b> % of readings kept when demanding a given confidence.</li>
+      <li><b>Hit rate:</b> % of captured Bluetooth that is actually our beacons.</li>
+      <li><b>TX power:</b> the expected RSSI at 1 m — the anchor of the distance formula.</li>
+      <li><b>Path-loss N:</b> how fast the signal decays with distance (2 = free space; higher indoors).</li>
+    </ul>
+  </details>
 </div>
